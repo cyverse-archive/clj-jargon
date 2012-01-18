@@ -1,4 +1,4 @@
-(ns nibblonian.jargon
+(ns clj-jargon.jargon
   (:require [clojure-commons.file-utils :as ft])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum]

@@ -5,7 +5,9 @@
            [org.irods.jargon.core.pub.domain AvuData]
            [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.core.pub IRODSFileSystem]
-           [org.irods.jargon.core.pub.io IRODSFileReader]
+           [org.irods.jargon.core.pub.io 
+            IRODSFileReader 
+            IRODSFileInputStream]
            [org.irods.jargon.datautils.datacache 
             DataCacheServiceFactoryImpl]
            [org.irods.jargon.datautils.shoppingcart 
@@ -458,6 +460,22 @@
   (let [fileFactory (:fileFactory cm)]
     (. fileFactory instanceIRODSFileInputStream (file input-path))))
 
+(defn proxy-input-stream
+  [istream cm]
+  (proxy [java.io.InputStream] []
+    (available [] (.available istream))
+    (mark [readlimit] (.mark istream readlimit))
+    (markSupported [] (.markSupported istream))
+    (read 
+      ([] (.read istream))
+      ([b] (.read istream b))
+      ([b off len] (.read istream b off len)))
+    (reset [] (.reset istream))
+    (skip [] (.skip istream))
+    (close []
+      (.close istream)
+      (.close (:fileSystem cm)))))
+
 (defn read-file
   [fpath buffer]
   (let [fileFactory (:fileFactory cm)
@@ -489,6 +507,8 @@
 (defmacro with-jargon
   [& body]
   `(let [context# (create-jargon-context-map)]
-     (binding
-       [cm context#]
-       (clean-return (do ~@body)))))
+     (binding [cm context#]
+       (let [retval# (do ~@body)]
+         (if (instance? IRODSFileInputStream retval#)
+           (proxy-input-stream retval# cm) ;The proxied InputStream handles clean up.
+           (clean-return retval#))))))

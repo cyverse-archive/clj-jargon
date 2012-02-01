@@ -221,8 +221,8 @@
   [path]
   "Returns the date that the file/directory was created."
   (cond
-    (is-dir? path)  (. (. (collection path) getCreatedAt) toString)
-    (is-file? path) (. (. (data-object path) getUpdatedAt) toString)
+    (is-dir? path)  (str (long (. (. (collection path) getCreatedAt) getTime)))
+    (is-file? path) (str (long (. (. (data-object path) getUpdatedAt) getTime)))
     :else             nil))
 
 (defn file-size

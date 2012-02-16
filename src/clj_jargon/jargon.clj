@@ -238,8 +238,10 @@
   [user]
   "Returns true if 'user' exists in iRODS."
   (try
-    (do (. (:userAO cm) findByName user) true)
-    (catch DataNotFoundException d false)))
+    (do 
+      (.findByName (:userAO cm) user) 
+      true)
+    (catch java.lang.Exception d false)))
 
 (defn set-owner
   [path owner]

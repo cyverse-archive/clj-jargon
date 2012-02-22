@@ -32,27 +32,33 @@
 (def irodsaccount (atom nil))
 (def conn-map (atom nil))
 (def fileSystem (atom nil))
+(def max-retries (atom 0))
+(def retry-sleep (atom 0))
 
 ;set up the thread-local var
 (def ^:dynamic cm nil)
 
 (defn init
   "Resets the connection config atoms with the values passed in."
-  [ahost aport auser apass ahome azone ares]
-  (reset! host ahost)
-  (reset! port aport)
-  (reset! username auser)
-  (reset! password apass)
-  (reset! home ahome)
-  (reset! zone azone)
-  (reset! defaultResource ares))
+  ([ahost aport auser apass ahome azone ares]
+    (init ahost aport auser apass ahome azone ares 0 0))
+  ([ahost aport auser apass ahome azone ares num-retries sleep]
+    (reset! host ahost)
+    (reset! port aport)
+    (reset! username auser)
+    (reset! password apass)
+    (reset! home ahome)
+    (reset! zone azone)
+    (reset! defaultResource ares)
+    (reset! max-retries num-retries)
+    (reset! retry-sleep sleep)))
 
 (defn clean-return
   [retval]
   (. (:fileSystem cm) close)
   retval)
 
-(defn create-jargon-context-map
+(defn- context-map
   []
   (let [account     (IRODSAccount. @host (Integer/parseInt @port) @username @password @home @zone @defaultResource)
         file-system (. IRODSFileSystem instance)
@@ -76,6 +82,31 @@
      :lister              lister
      :home                @home
      :zone                @zone}))
+
+(defn- get-context
+  []
+  (let [retval {:succeeded true :retval nil :exception nil :retry false}]
+    (try
+      (assoc retval :retval (context-map))
+      (catch java.net.ConnectException e
+        (assoc retval :exception e :succeeded false :retry true))
+      (catch java.lang.Exception e
+        (assoc retval :exception e :succeeded false :retry false)))))
+
+(defn create-jargon-context-map
+  []
+  (loop [num-tries 0]
+    (let [retval (get-context)
+          error? (not (:succeeded retval))
+          retry? (:retry retval)]
+      (cond
+        (and error? retry? (< num-tries @max-retries))
+        (do (Thread/sleep @retry-sleep)(recur (+ num-tries 1)))
+        
+        error?
+        (throw (:exception retval))
+        
+        :else (:retval retval)))))
 
 (defn user-groups
   [user]

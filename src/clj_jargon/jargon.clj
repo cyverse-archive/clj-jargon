@@ -229,6 +229,18 @@
         fixed-path (ft/rm-last-slash path)]
     (.. (. ff (instanceIRODSFile fixed-path)) isDirectory)))
 
+(defn list-paths
+  "Returns a list of paths under the parent path. Directories end with /."
+  [parent-path]
+  (let [fao (:fileSystemAO cm)]
+    (into []
+          (map
+           #(let [full-path (ft/path-join parent-path %1)]
+              (if (is-dir? full-path)
+                (ft/add-trailing-slash full-path)
+                full-path))
+           (.getListInDir fao (file parent-path))))))
+
 (defn data-object
   [path]
   "Returns an instance of DataObject represeting 'path'."
@@ -364,8 +376,9 @@
     (sub-collections path)))
 
 (defn sub-dir-maps
-  [user list-obj]
+  [user list-obj filter-files]
   (let [abs-path (. list-obj getFormattedAbsolutePath)
+        basename (ft/basename abs-path)
         lister   (:lister cm)]
     {:id            abs-path
      :label         (ft/basename abs-path)
@@ -536,6 +549,82 @@
         cart-svc (ShoppingCartServiceImpl. aof account (DataCacheServiceFactoryImpl. aof))
         cart     (shopping-cart filepaths)]
     (.serializeShoppingCartAsSpecifiedUser cart-svc cart cart-key user)))
+
+(defn permissions
+  [user fpath]
+  (cond
+    (is-dir? fpath)
+    (let [perms (user-collection-perms user fpath)]
+      {:read (contains? perms read-perm)
+       :write (contains? perms write-perm)
+       :own (contains? perms own-perm)})
+    
+    (is-file? fpath)
+    (let [perms (user-dataobject-perms user fpath)]
+      {:read (contains? perms read-perm)
+       :write (contains? perms write-perm)
+       :own (contains? perms own-perm)})
+    
+    :else
+    {:read false
+     :write false
+     :own false}))
+
+(defn remove-permissions
+  [user fpath]
+  (cond
+   (is-file? fpath)
+   (let [dataobj (:dataObjectAO cm)
+         zone    (:zone cm)]
+     (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user))
+   
+   (is-dir? fpath)
+   (let [coll (:collectionAO cm)
+         zone (:zone cm)]
+     (.removeAccessPermissionForUserAsAdmin coll zone fpath user true))))
+
+(defn set-permissions
+  [user fpath read? write? own?]
+  (cond
+    (is-file? fpath)
+    (let [dataobj (:dataObjectAO cm)
+          zone    (:zone cm)]
+      (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)
+      
+      (when own?
+        (.setAccessPermissionOwnInAdminMode dataobj zone fpath user))
+      
+      (when write?
+        (.setAccessPermissionWriteInAdminMode dataobj zone fpath user))
+      
+      (when read?
+        (.setAccessPermissionReadInAdminMode dataobj zone fpath user)))
+    
+    (is-dir? fpath)
+    (let [coll (:collectionAO cm)
+          zone (:zone cm)]
+      (.removeAccessPermissionForUserAsAdmin coll zone fpath user false)
+      
+      (when own?
+        (.setAccessPermissionOwnAsAdmin coll zone fpath user false))
+      
+      (when write?
+        (.setAccessPermissionWriteAsAdmin coll zone fpath user false))
+      
+      (when read?
+        (.setAccessPermissionReadAsAdmin coll zone fpath user false)))))
+
+(defn owns?
+  [user fpath]
+  (cond
+    (is-file? fpath)
+    (owns-dataobject? user fpath)
+    
+    (is-dir? fpath)
+    (owns-collection? user fpath)
+    
+    :else
+    false))
 
 (defmacro with-jargon
   [& body]

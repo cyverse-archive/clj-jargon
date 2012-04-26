@@ -140,17 +140,21 @@
   [user data-path]
   (let [perms  (user-dataobject-perms user data-path)
         read   (or (contains? perms read-perm) (contains? perms own-perm))
-        write  (or (contains? perms write-perm) (contains? perms own-perm))]
+        write  (or (contains? perms write-perm) (contains? perms own-perm))
+        own    (contains? perms own-perm)]
     {:read  read
-     :write write}))
+     :write write
+     :own own}))
 
 (defn collection-perm-map
   [user coll-path]
   (let [perms  (user-collection-perms user coll-path)
         read   (or (contains? perms read-perm) (contains? perms own-perm))
-        write  (or (contains? perms write-perm) (contains? perms own-perm))]
+        write  (or (contains? perms write-perm) (contains? perms own-perm))
+        own    (contains? perms own-perm)]
     {:read  read
-     :write write}))
+     :write write
+     :own   own}))
 
 (defn dataobject-perm?
   [username data-path checked-perm]

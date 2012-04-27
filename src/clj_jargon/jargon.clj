@@ -233,6 +233,26 @@
         fixed-path (ft/rm-last-slash path)]
     (.. (. ff (instanceIRODSFile fixed-path)) isDirectory)))
 
+(defn user-perms->map
+  [user-perms-obj]
+  (let [enum-val (.getFilePermissionEnum user-perms-obj)]
+    {:user (.getUserName user-perms-obj)
+     :permissions {:read  (or (= enum-val read-perm) (= enum-val own-perm))
+                   :write (or (= enum-val write-perm) (= enum-val own-perm))
+                   :own   (= enum-val own-perm)}}))
+
+(defn list-user-perms
+  [abs-path]
+  (if (is-file? abs-path)
+    (into []
+          (map
+           user-perms->map
+           (.listPermissionsForDataObject (:dataObjectAO cm) abs-path)))
+    (into []
+          (map
+           user-perms->map
+           (.listPermissionsForCollection (:collectionAO cm) abs-path)))))
+
 (defn list-paths
   "Returns a list of paths under the parent path. Directories end with /."
   [parent-path]

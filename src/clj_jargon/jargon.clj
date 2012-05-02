@@ -1,4 +1,4 @@
-(ns clj-jargon.jargon
+/(ns clj-jargon.jargon
   (:require [clojure-commons.file-utils :as ft])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum]
@@ -578,17 +578,11 @@
   [user fpath]
   (cond
     (is-dir? fpath)
-    (let [perms (user-collection-perms user fpath)]
-      {:read (contains? perms read-perm)
-       :write (contains? perms write-perm)
-       :own (contains? perms own-perm)})
+    (collection-perm-map user fpath)
     
     (is-file? fpath)
-    (let [perms (user-dataobject-perms user fpath)]
-      {:read (contains? perms read-perm)
-       :write (contains? perms write-perm)
-       :own (contains? perms own-perm)})
-    
+    (dataobject-perm-map user fpath)
+
     :else
     {:read false
      :write false
@@ -608,35 +602,37 @@
      (.removeAccessPermissionForUserAsAdmin coll zone fpath user true))))
 
 (defn set-permissions
-  [user fpath read? write? own?]
-  (cond
-    (is-file? fpath)
-    (let [dataobj (:dataObjectAO cm)
-          zone    (:zone cm)]
-      (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)
+  ([user fpath read? write? own?]
+     (set-permissions user fpath read? write? own? false))
+  ([user fpath read? write? own? recursive?]
+     (cond
+      (is-file? fpath)
+      (let [dataobj (:dataObjectAO cm)
+            zone    (:zone cm)]
+        (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)
+        
+        (when own?
+          (.setAccessPermissionOwnInAdminMode dataobj zone fpath user))
+        
+        (when write?
+          (.setAccessPermissionWriteInAdminMode dataobj zone fpath user))
+        
+        (when read?
+          (.setAccessPermissionReadInAdminMode dataobj zone fpath user)))
       
-      (when own?
-        (.setAccessPermissionOwnInAdminMode dataobj zone fpath user))
-      
-      (when write?
-        (.setAccessPermissionWriteInAdminMode dataobj zone fpath user))
-      
-      (when read?
-        (.setAccessPermissionReadInAdminMode dataobj zone fpath user)))
-    
-    (is-dir? fpath)
-    (let [coll (:collectionAO cm)
-          zone (:zone cm)]
-      (.removeAccessPermissionForUserAsAdmin coll zone fpath user false)
-      
-      (when own?
-        (.setAccessPermissionOwnAsAdmin coll zone fpath user false))
-      
-      (when write?
-        (.setAccessPermissionWriteAsAdmin coll zone fpath user false))
-      
-      (when read?
-        (.setAccessPermissionReadAsAdmin coll zone fpath user false)))))
+      (is-dir? fpath)
+      (let [coll (:collectionAO cm)
+            zone (:zone cm)]
+        (.removeAccessPermissionForUserAsAdmin coll zone fpath user recursive?)
+        
+        (when own?
+          (.setAccessPermissionOwnAsAdmin coll zone fpath user recursive?))
+        
+        (when write?
+          (.setAccessPermissionWriteAsAdmin coll zone fpath user recursive?))
+        
+        (when read?
+          (.setAccessPermissionReadAsAdmin coll zone fpath user recursive?))))))
 
 (defn owns?
   [user fpath]

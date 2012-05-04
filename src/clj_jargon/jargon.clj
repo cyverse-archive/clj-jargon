@@ -1,4 +1,4 @@
-/(ns clj-jargon.jargon
+(ns clj-jargon.jargon
   (:require [clojure-commons.file-utils :as ft])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum]
@@ -94,6 +94,7 @@
         (assoc retval :exception e :succeeded false :retry false)))))
 
 (defn create-jargon-context-map
+  "Creates a map containing instances of commonly used Jargon objects."
   []
   (loop [num-tries 0]
     (let [retval (get-context)
@@ -109,11 +110,14 @@
         :else (:retval retval)))))
 
 (defn user-groups
+  "Returns a list of group names that the user is in."
   [user]
   (for [ug (. (:userGroupAO cm) findUserGroupsForUser user)]
     (. ug getUserGroupName)))
 
 (defn user-dataobject-perms
+  "Returns a set of permissions that user has for the dataobject at
+   data-path. Takes into account the groups that a user is in."
   [user data-path]
   (let [user-groups  (user-groups user)
         zone         (:zone cm)
@@ -125,6 +129,8 @@
                      (. dataObjectAO getPermissionForDataObject data-path username zone)))))))
 
 (defn user-collection-perms
+  "Returns a set of permissions that a user has for the collection at
+   data-path. Takes into account the groups that a user is in. "
   [user coll-path]
   (let [user-groups  (user-groups user)
         zone         (:zone cm)
@@ -137,56 +143,84 @@
                 (. collectionAO getPermissionForCollection coll-path username zone)))))))
 
 (defn dataobject-perm-map
+  "Uses (user-dataobject-perms) to grab the 'raw' permissions for
+   the user for the dataobject at data-path, and returns a map with
+   the keys :read :write and :own. The values are booleans."
   [user data-path]
   (let [perms  (user-dataobject-perms user data-path)
-        read   (or (contains? perms read-perm) (contains? perms own-perm))
-        write  (or (contains? perms write-perm) (contains? perms own-perm))
+        read   (or (contains? perms read-perm)
+                   (contains? perms write-perm)
+                   (contains? perms own-perm))
+        write  (or (contains? perms write-perm)
+                   (contains? perms own-perm))
         own    (contains? perms own-perm)]
     {:read  read
      :write write
      :own own}))
 
 (defn collection-perm-map
+  "Uses (user-collection-perms) to grab the 'raw' permissions for
+   the user for the collection at coll-path and returns a map with
+   the keys :read, :write, and :own. The values are booleans."
   [user coll-path]
   (let [perms  (user-collection-perms user coll-path)
-        read   (or (contains? perms read-perm) (contains? perms own-perm))
-        write  (or (contains? perms write-perm) (contains? perms own-perm))
+        read   (or (contains? perms read-perm)
+                   (contains? perms write-perm)
+                   (contains? perms own-perm))
+        write  (or (contains? perms write-perm)
+                   (contains? perms own-perm))
         own    (contains? perms own-perm)]
     {:read  read
      :write write
      :own   own}))
 
 (defn dataobject-perm?
+  "Utility function that checks to see of the user has the specified
+   permission for data-path."
   [username data-path checked-perm]
   (let [perms (user-dataobject-perms username data-path)]
     (or (contains? perms checked-perm) (contains? perms own-perm))))
 
 (defn dataobject-readable?
+  "Checks to see if the user has read permissions on data-path. Only
+   works for dataobjects."
   [user data-path]
   (dataobject-perm? user data-path read-perm))
   
 (defn dataobject-writeable?
+  "Checks to see if the user has write permissions on data-path. Only
+   works for dataobjects."
   [user data-path]
   (dataobject-perm? user data-path write-perm))
 
 (defn owns-dataobject?
+  "Checks to see if the user has ownership permissions on data-path. Only
+   works for dataobjects."
   [user data-path]
   (dataobject-perm? user data-path own-perm))
 
 (defn collection-perm?
+  "Utility function that checks to see if the user has the specified
+   permission for the collection path."
   [username coll-path checked-perm]
   (let [perms (user-collection-perms username coll-path)]
     (or (contains? perms checked-perm) (contains? perms own-perm))))
 
 (defn collection-readable?
+  "Checks to see if the user has read permissions on coll-path. Only
+   works for collection paths."
   [user coll-path]
   (collection-perm? user coll-path read-perm))
 
 (defn collection-writeable?
+  "Checks to see if the suer has write permissions on coll-path. Only
+   works for collection paths."
   [user coll-path]
   (collection-perm? user coll-path write-perm))
 
 (defn owns-collection?
+  "Checks to see if the user has ownership permissions on coll-path. Only
+   works for collection paths."
   [user coll-path]
   (collection-perm? user coll-path own-perm))
 
@@ -610,29 +644,21 @@
       (let [dataobj (:dataObjectAO cm)
             zone    (:zone cm)]
         (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)
-        
-        (when own?
-          (.setAccessPermissionOwnInAdminMode dataobj zone fpath user))
-        
-        (when write?
-          (.setAccessPermissionWriteInAdminMode dataobj zone fpath user))
-        
-        (when read?
-          (.setAccessPermissionReadInAdminMode dataobj zone fpath user)))
+
+        (cond
+         own?   (.setAccessPermissionOwnInAdminMode dataobj zone fpath user)
+         write? (.setAccessPermissionWriteInAdminMode dataobj zone fpath user)
+         read?  (.setAccessPermissionReadInAdminMode dataobj zone fpath user)))
       
       (is-dir? fpath)
       (let [coll (:collectionAO cm)
             zone (:zone cm)]
         (.removeAccessPermissionForUserAsAdmin coll zone fpath user recursive?)
-        
-        (when own?
-          (.setAccessPermissionOwnAsAdmin coll zone fpath user recursive?))
-        
-        (when write?
-          (.setAccessPermissionWriteAsAdmin coll zone fpath user recursive?))
-        
-        (when read?
-          (.setAccessPermissionReadAsAdmin coll zone fpath user recursive?))))))
+
+        (cond
+         own?   (.setAccessPermissionOwnAsAdmin coll zone fpath user recursive?)
+         write? (.setAccessPermissionWriteAsAdmin coll zone fpath user recursive?)
+         read?  (.setAccessPermissionReadAsAdmin coll zone fpath user recursive?))))))
 
 (defn owns?
   [user fpath]

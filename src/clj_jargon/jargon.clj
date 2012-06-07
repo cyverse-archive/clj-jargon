@@ -34,6 +34,7 @@
 (def fileSystem (atom nil))
 (def max-retries (atom 0))
 (def retry-sleep (atom 0))
+(def use-trash (atom false))
 
 ;set up the thread-local var
 (def ^:dynamic cm nil)
@@ -41,8 +42,8 @@
 (defn init
   "Resets the connection config atoms with the values passed in."
   ([ahost aport auser apass ahome azone ares]
-    (init ahost aport auser apass ahome azone ares 0 0))
-  ([ahost aport auser apass ahome azone ares num-retries sleep]
+    (init ahost aport auser apass ahome azone ares 0 0 false))
+  ([ahost aport auser apass ahome azone ares num-retries sleep recycle]
     (reset! host ahost)
     (reset! port aport)
     (reset! username auser)
@@ -51,7 +52,8 @@
     (reset! zone azone)
     (reset! defaultResource ares)
     (reset! max-retries num-retries)
-    (reset! retry-sleep sleep)))
+    (reset! retry-sleep sleep)
+    (reset! use-trash recycle)))
 
 (defn clean-return
   [retval]
@@ -534,10 +536,15 @@
 
 (defn delete
   [a-path]
-  (let [fileSystemAO (:fileSystemAO cm)]
-    (if (is-dir? a-path)
-      (. fileSystemAO directoryDeleteForce (file a-path))
-      (. fileSystemAO fileDeleteForce (file a-path)))))
+  (let [fileSystemAO (:fileSystemAO cm)
+        resource (file a-path)]
+    (if @use-trash
+      (if (is-dir? a-path)
+        (. fileSystemAO directoryDeleteNoForce resource)
+        (. fileSystemAO fileDeleteNoForce resource))
+      (if (is-dir? a-path)
+        (. fileSystemAO directoryDeleteForce resource)
+        (. fileSystemAO fileDeleteForce resource)))))
 
 (defn move
   [source dest]

@@ -1,5 +1,6 @@
 (ns clj-jargon.jargon
-  (:require [clojure-commons.file-utils :as ft])
+  (:require [clojure-commons.file-utils :as ft]
+            [clojure.tools.logging :as log])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum]
            [org.irods.jargon.core.pub.domain AvuData]
@@ -35,6 +36,10 @@
 (def max-retries (atom 0))
 (def retry-sleep (atom 0))
 (def use-trash (atom false))
+
+; Debuging code.
+(def with-jargon-index (ref 0))
+(def ^:dynamic curr-with-jargon-index nil)
 
 ;set up the thread-local var
 (def ^:dynamic cm nil)
@@ -85,14 +90,23 @@
      :home                @home
      :zone                @zone}))
 
+(defn- log-value
+  [msg value]
+  (log/warn curr-with-jargon-index "-" msg value)
+  value)
+
 (defn- get-context
   []
   (let [retval {:succeeded true :retval nil :exception nil :retry false}]
     (try
-      (assoc retval :retval (context-map))
+      (log-value "retval:" (assoc retval :retval (context-map)))
       (catch java.net.ConnectException e
+        (log/warn curr-with-jargon-index "- caught a ConnectException:" e)
+        (log/warn curr-with-jargon-index "- need to retry...")
         (assoc retval :exception e :succeeded false :retry true))
       (catch java.lang.Exception e
+        (log/warn curr-with-jargon-index "- got an Exception:" e)
+        (log/warn curr-with-jargon-index "- shouldn't retry...")
         (assoc retval :exception e :succeeded false :retry false)))))
 
 (defn create-jargon-context-map
@@ -681,9 +695,14 @@
 
 (defmacro with-jargon
   [& body]
-  `(let [context# (create-jargon-context-map)]
-     (binding [cm context#]
-       (let [retval# (do ~@body)]
-         (if (instance? IRODSFileInputStream retval#)
-           (proxy-input-stream retval# cm) ;The proxied InputStream handles clean up.
-           (clean-return retval#))))))
+  `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
+     (log/warn "curr-with-jargon-index:" curr-with-jargon-index)
+     (let [context# (create-jargon-context-map)]
+      (binding [cm context#]
+        (let [retval# (do ~@body)]
+          (if (instance? IRODSFileInputStream retval#)
+            (do (log/warn curr-with-jargon-index "- returning a proxy input stream...")
+                (proxy-input-stream retval# cm)) ;The proxied InputStream handles clean up.
+            (do (log/warn curr-with-jargon-index "- cleaning up and returning a plain value")
+                (clean-return retval#))))))))
+

@@ -212,7 +212,8 @@
   "Checks to see if the user has read permissions on coll-path. Only
    works for collection paths."
   [user coll-path]
-  (collection-perm? user coll-path read-perm))
+  (or (collection-perm? user coll-path read-perm)
+      (collection-perm? user coll-path write-perm)))
 
 (defn collection-writeable?
   "Checks to see if the suer has write permissions on coll-path. Only

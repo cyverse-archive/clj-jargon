@@ -1,6 +1,7 @@
 (ns clj-jargon.jargon
   (:require [clojure-commons.file-utils :as ft]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [clojure.string :as string])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum]
            [org.irods.jargon.core.pub.domain AvuData]
@@ -693,6 +694,36 @@
     
     :else
     false))
+
+(defn remove-access-permissions
+  [user abs-path]
+  (cond
+   (is-file? abs-path)
+   (let [dataobj (:dataObjectAO cm)
+         zone    (:zone cm)]
+     (.removeAccessPermissionsForUserInAdminMode dataobj zone abs-path user))
+
+   (is-dir? abs-path)
+   (let [coll (:collectionAO cm)
+         zone (:zone cm)]
+     (.removeAccessPermissionForUserAsAdmin coll zone abs-path user false))))
+
+(defn fix-owners
+  [abs-path & owners]
+  (let [curr-user-perms   (list-user-perms abs-path)
+        set-of-new-owners (set owners)
+        rm-zone           #(if (string/split %1 #"\#")
+                             (first (string/split %1 #"\#"))
+                             "")]
+    (doseq [non-user (into []
+                           (filter
+                            #(not (contains? set-of-new-owners %1))
+                            (map :user curr-user-perms)))]
+      (println (str "Non-users: " non-user))
+      (remove-access-permissions non-user abs-path))
+    
+    (doseq [new-owner set-of-new-owners]
+      (set-owner abs-path new-owner))))
 
 (defmacro with-jargon
   [& body]

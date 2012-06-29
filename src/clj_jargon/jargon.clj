@@ -16,7 +16,14 @@
             FileShoppingCart
             ShoppingCartEntry 
             ShoppingCartServiceImpl]
-           [java.io FileInputStream]))
+           [java.io FileInputStream]
+           [org.irods.jargon.ticket 
+            TicketServiceFactoryImpl 
+            TicketAdminServiceImpl
+            TicketClientSupport]
+           [org.irods.jargon.ticket.packinstr
+            TicketInp
+            TicketCreateModeEnum]))
 
 (def read-perm FilePermissionEnum/READ)
 (def write-perm FilePermissionEnum/WRITE)
@@ -61,6 +68,10 @@
     (reset! retry-sleep sleep)
     (reset! use-trash recycle)))
 
+(defn account
+  [user pass]
+  (IRODSAccount. @host (Integer/parseInt @port) user pass @home @zone @defaultResource))
+
 (defn clean-return
   [retval]
   (. (:fileSystem cm) close)
@@ -93,7 +104,7 @@
 
 (defn- log-value
   [msg value]
-  (log/warn curr-with-jargon-index "-" msg value)
+  (log/debug curr-with-jargon-index "-" msg value)
   value)
 
 (defn- get-context
@@ -102,12 +113,12 @@
     (try
       (log-value "retval:" (assoc retval :retval (context-map)))
       (catch java.net.ConnectException e
-        (log/warn curr-with-jargon-index "- caught a ConnectException:" e)
-        (log/warn curr-with-jargon-index "- need to retry...")
+        (log/debug curr-with-jargon-index "- caught a ConnectException:" e)
+        (log/debug curr-with-jargon-index "- need to retry...")
         (assoc retval :exception e :succeeded false :retry true))
       (catch java.lang.Exception e
-        (log/warn curr-with-jargon-index "- got an Exception:" e)
-        (log/warn curr-with-jargon-index "- shouldn't retry...")
+        (log/debug curr-with-jargon-index "- got an Exception:" e)
+        (log/debug curr-with-jargon-index "- shouldn't retry...")
         (assoc retval :exception e :succeeded false :retry false)))))
 
 (defn create-jargon-context-map
@@ -725,16 +736,92 @@
     (doseq [new-owner set-of-new-owners]
       (set-owner abs-path new-owner))))
 
+(defn ticket-admin-service
+  "Creates an instance of TicketAdminService, which provides
+   access to utility methods for performing operations on tickets.
+   Probably doesn't need to be called directly."
+  [user]
+  (let [tsf (TicketServiceFactoryImpl. (:accessObjectFactory cm))]
+    (.instanceTicketAdminService tsf (account user (temp-password user)))))
+
+(defn set-ticket-options
+  "Sets the optional settings for a ticket, such as the expiration date
+   and the uses limit."
+  [ticket-id tas 
+   {:keys [byte-write-limit expiry file-write-limit uses-limit]}]
+  (if byte-write-limit
+    (.setTicketByteWriteLimit tas ticket-id byte-write-limit))
+  (if expiry
+    (.setTicketExpiration tas ticket-id expiry))
+  (if file-write-limit
+    (.setTicketFileWriteLimit tas ticket-id file-write-limit))
+  (if uses-limit
+    (.setTicketUsesLimit tas ticket-id uses-limit)))
+
+(defn create-ticket
+  [user fpath ticket-id & {:as ticket-opts}]
+  (let [tas        (ticket-admin-service user)
+        read-mode  TicketCreateModeEnum/READ
+        new-ticket (.createTicket tas read-mode (file fpath) ticket-id)]
+    (set-ticket-options ticket-id tas ticket-opts)
+    new-ticket))
+
+(defn modify-ticket
+  [user ticket-id & {:as ticket-opts}]
+  (set-ticket-options ticket-id (ticket-admin-service user) ticket-opts))
+
+(defn delete-ticket
+  "Deletes the ticket specified by ticket-id."
+  [user ticket-id]
+  (.deleteTicket (ticket-admin-service user) ticket-id))
+
+(defn ticket?
+  "Checks to see if ticket-id is already being used as a ticket
+   identifier."
+  [user ticket-id]
+  (.isTicketInUse (ticket-admin-service user) ticket-id))
+
+(defn ticket-by-id
+  "Looks up the ticket by the provided ticket-id string and
+   returns an instance of Ticket."
+  [user ticket-id]
+  (.getTicketForSpecifiedTicketString 
+    (ticket-admin-service user) 
+    ticket-id))
+
+(defn ticket-expired?
+  [ticket-obj]
+  (if (.getExpireTime ticket-obj)
+    (.. (java.util.Date.) (after (.getExpireTime ticket-obj)))
+    false))
+
+(defn ticket-used-up?
+  [ticket-obj]
+  (> (.getUsesCount ticket-obj) (.getUsesLimit ticket-obj)))
+
+(defn init-ticket-session
+  [ticket-id]
+  (.. (:accessObjectFactory cm)
+    getIrodsSession
+    (currentConnection (:irodsAccount cm))
+    (irodsFunction 
+      (TicketInp/instanceForSetSessionWithTicket ticket-id))))
+
+(defn ticket-input-stream
+  [user ticket-id]
+  (init-ticket-session ticket-id)
+  (input-stream (.getIrodsAbsolutePath (ticket-by-id user ticket-id))))
+
 (defmacro with-jargon
   [& body]
   `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
-     (log/warn "curr-with-jargon-index:" curr-with-jargon-index)
+     (log/debug "curr-with-jargon-index:" curr-with-jargon-index)
      (let [context# (create-jargon-context-map)]
       (binding [cm context#]
         (let [retval# (do ~@body)]
           (if (instance? IRODSFileInputStream retval#)
-            (do (log/warn curr-with-jargon-index "- returning a proxy input stream...")
+            (do (log/debug curr-with-jargon-index "- returning a proxy input stream...")
                 (proxy-input-stream retval# cm)) ;The proxied InputStream handles clean up.
-            (do (log/warn curr-with-jargon-index "- cleaning up and returning a plain value")
+            (do (log/debug curr-with-jargon-index "- cleaning up and returning a plain value")
                 (clean-return retval#))))))))
 

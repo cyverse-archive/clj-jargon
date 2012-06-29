@@ -74,21 +74,21 @@
 
 (defn clean-return
   [retval]
-  (. (:fileSystem cm) close)
+  (.close (:fileSystem cm))
   retval)
 
 (defn- context-map
   []
   (let [account     (IRODSAccount. @host (Integer/parseInt @port) @username @password @home @zone @defaultResource)
-        file-system (. IRODSFileSystem instance)
-        aof         (. file-system getIRODSAccessObjectFactory)
-        cao         (. aof getCollectionAO account)
-        dao         (. aof getDataObjectAO account)
-        uao         (. aof getUserAO account)
-        ugao        (. aof getUserGroupAO account)
-        ff          (. file-system getIRODSFileFactory account)
-        fao         (. aof getIRODSFileSystemAO account)
-        lister      (. aof getCollectionAndDataObjectListAndSearchAO account)]
+        file-system (IRODSFileSystem/instance)
+        aof         (.getIRODSAccessObjectFactory file-system)
+        cao         (.getCollectionAO aof account)
+        dao         (.getDataObjectAO aof account)
+        uao         (.getUserAO aof account)
+        ugao        (.getUserGroupAO aof account)
+        ff          (.getIRODSFileFactory file-system account)
+        fao         (.getIRODSFileSystemAO aof account)
+        lister      (.getCollectionAndDataObjectListAndSearchAO aof account)]
     {:irodsAccount        account
      :fileSystem          file-system
      :accessObjectFactory aof
@@ -130,7 +130,8 @@
           retry? (:retry retval)]
       (cond
         (and error? retry? (< num-tries @max-retries))
-        (do (Thread/sleep @retry-sleep)(recur (+ num-tries 1)))
+        (do (Thread/sleep @retry-sleep)
+          (recur (inc num-tries)))
         
         error?
         (throw (:exception retval))
@@ -140,8 +141,8 @@
 (defn user-groups
   "Returns a list of group names that the user is in."
   [user]
-  (for [ug (. (:userGroupAO cm) findUserGroupsForUser user)]
-    (. ug getUserGroupName)))
+  (for [ug (.findUserGroupsForUser (:userGroupAO cm) user)]
+    (.getUserGroupName ug)))
 
 (defn user-dataobject-perms
   "Returns a set of permissions that user has for the dataobject at
@@ -150,11 +151,11 @@
   (let [user-groups  (user-groups user)
         zone         (:zone cm)
         dataObjectAO (:dataObjectAO cm)]
-      (set (into [] 
-                 (filter 
-                   (fn [perm] (not= perm none-perm)) 
-                   (for [username user-groups]
-                     (. dataObjectAO getPermissionForDataObject data-path username zone)))))))
+      (set 
+        (filterv
+          #(not= %1 none-perm)
+          (for [username user-groups]
+            (.getPermissionForDataObject dataObjectAO data-path username zone))))))
 
 (defn user-collection-perms
   "Returns a set of permissions that a user has for the collection at
@@ -164,11 +165,10 @@
         zone         (:zone cm)
         collectionAO (:collectionAO cm)]
     (set 
-      (into [] 
-            (filter
-              (fn [perm] (not= perm none-perm))
-              (for [username user-groups]
-                (. collectionAO getPermissionForCollection coll-path username zone)))))))
+      (filterv
+        #(not= %1 none-perm)
+        (for [username user-groups]
+          (.getPermissionForCollection collectionAO coll-path username zone))))))
 
 (defn dataobject-perm-map
   "Uses (user-dataobject-perms) to grab the 'raw' permissions for
@@ -184,7 +184,7 @@
         own    (contains? perms own-perm)]
     {:read  read
      :write write
-     :own own}))
+     :own   own}))
 
 (defn collection-perm-map
   "Uses (user-collection-perms) to grab the 'raw' permissions for
@@ -282,7 +282,7 @@
       paths - A sequence of strings containing paths.
 
     Returns: Boolean"
-  (== 0 (count (for [path paths :when (not (exists? path))] path))))
+  (zero? (count (for [path paths :when (not (exists? path))] path))))
 
 (defn is-file?
   [path]
@@ -307,58 +307,55 @@
 (defn list-user-perms
   [abs-path]
   (if (is-file? abs-path)
-    (into []
-          (map
-           user-perms->map
-           (.listPermissionsForDataObject (:dataObjectAO cm) abs-path)))
-    (into []
-          (map
-           user-perms->map
-           (.listPermissionsForCollection (:collectionAO cm) abs-path)))))
+    (mapv
+      user-perms->map
+      (.listPermissionsForDataObject (:dataObjectAO cm) abs-path))
+    (mapv
+      user-perms->map
+      (.listPermissionsForCollection (:collectionAO cm) abs-path))))
 
 (defn list-paths
   "Returns a list of paths under the parent path. Directories end with /."
   [parent-path]
   (let [fao (:fileSystemAO cm)]
-    (into []
-          (map
-           #(let [full-path (ft/path-join parent-path %1)]
-              (if (is-dir? full-path)
-                (ft/add-trailing-slash full-path)
-                full-path))
-           (.getListInDir fao (file parent-path))))))
+    (mapv
+      #(let [full-path (ft/path-join parent-path %1)]
+         (if (is-dir? full-path)
+           (ft/add-trailing-slash full-path)
+           full-path))
+      (.getListInDir fao (file parent-path)))))
 
 (defn data-object
   [path]
   "Returns an instance of DataObject represeting 'path'."
-  (. (:dataObjectAO cm) findByAbsolutePath path))
+  (.findByAbsolutePath (:dataObjectAO cm) path))
 
 (defn collection
   [path]
   "Returns an instance of Collection (the Jargon version) representing
     a directory in iRODS."
-  (. (:collectionAO cm) findByAbsolutePath (ft/rm-last-slash path)))
+  (.findByAbsolutePath (:collectionAO cm) (ft/rm-last-slash path)))
 
 (defn lastmod-date
   [path]
   "Returns the date that the file/directory was last modified."
   (cond
-    (is-dir? path)  (str (long (. (. (collection path) getModifiedAt) getTime)))
-    (is-file? path) (str (long (. (. (data-object path) getUpdatedAt) getTime)))
+    (is-dir? path)  (str (long (.getTime (.getModifiedAt (collection path)))))
+    (is-file? path) (str (long (.getTime (.getUpdatedAt (data-object path)))))
     :else nil))
 
 (defn created-date
   [path]
   "Returns the date that the file/directory was created."
   (cond
-    (is-dir? path)  (str (long (. (. (collection path) getCreatedAt) getTime)))
-    (is-file? path) (str (long (. (. (data-object path) getUpdatedAt) getTime)))
+    (is-dir? path)  (str (long (.. (collection path) getCreatedAt getTime)))
+    (is-file? path) (str (long (.. (data-object path) getUpdatedAt getTime)))
     :else             nil))
 
 (defn file-size
   [path]
   "Returns the size of the file in bytes."
-  (. (data-object path) getDataSize))
+  (.getDataSize (data-object path)))
 
 (defn response-map
   [action paths]
@@ -381,9 +378,9 @@
       path - The path whose owner is being set.
       owner - The username of the user who will be the owner of 'path'."
   (if (is-file? path)
-    (. (:dataObjectAO cm) setAccessPermissionOwn @zone path owner)
+    (.setAccessPermissionOwn (:dataObjectAO cm) @zone path owner)
     (if (is-dir? path)
-      (. (:collectionAO cm) setAccessPermissionOwn @zone path owner true))))
+      (.setAccessPermissionOwn (:collectionAO cm) @zone path owner true))))
 
 (defn set-inherits
   [path]
@@ -392,7 +389,7 @@
     Parameters:
       path - The path being altered."
   (if (is-dir? path)
-    (. (:collectionAO cm) setAccessPermissionInherit @zone path false)))
+    (.setAccessPermissionInherit (:collectionAO cm) @zone path false)))
 
 (defn is-writeable?
   [user path]
@@ -403,9 +400,9 @@
       path - String containing an absolute path for something in iRODS."
   (cond
     (not (user-exists? user)) false
-    (is-dir? path)            (collection-writeable? user (. path replaceAll "/$" ""))
-    (is-file? path)           (dataobject-writeable? user (. path replaceAll "/$" ""))
-    :else                       false))
+    (is-dir? path)            (collection-writeable? user (.replaceAll path "/$" ""))
+    (is-file? path)           (dataobject-writeable? user (.replaceAll path "/$" ""))
+    :else                     false))
 
 (defn is-readable?
   [user path]
@@ -416,9 +413,9 @@
       path - String containing an path for something in iRODS."
   (cond
     (not (user-exists? user)) false
-    (is-dir? path)            (collection-readable? user (. path replaceAll "/$" ""))
-    (is-file? path)           (dataobject-readable? user (. path replaceAll "/$" ""))
-    :else                       false))
+    (is-dir? path)            (collection-readable? user (.replaceAll path "/$" ""))
+    (is-file? path)           (dataobject-readable? user (.replaceAll path "/$" ""))
+    :else                     false))
 
 (defn last-dir-in-path
   [path]
@@ -433,7 +430,8 @@
 
     Returns:
       String containing the name of the last directory in the path."
-  (. (. (:collectionAO cm) findByAbsolutePath (ft/rm-last-slash path)) getCollectionLastPathComponent))
+  (.getCollectionLastPathComponent 
+    (.findByAbsolutePath (:collectionAO cm) (ft/rm-last-slash path))))
 
 (defn sub-collections
   [path]
@@ -446,7 +444,7 @@
     Returns:
       Sequence containing Collections (the Jargon kind) representing
       directories that reside under the directory represented by 'path'."
-  (. (:lister cm) listCollectionsUnderPath (ft/rm-last-slash path) 0))
+  (.listCollectionsUnderPath (:lister cm) (ft/rm-last-slash path) 0))
 
 (defn sub-collection-paths
   [path]
@@ -459,30 +457,30 @@
     Returns:
       Sequence containing the paths for directories that live under 'path'."
   (map
-    (fn [s] (. s getFormattedAbsolutePath))
+    #(.getFormattedAbsolutePath %)
     (sub-collections path)))
 
 (defn sub-dir-maps
   [user list-obj filter-files]
-  (let [abs-path (. list-obj getFormattedAbsolutePath)
+  (let [abs-path (.getFormattedAbsolutePath list-obj)
         basename (ft/basename abs-path)
         lister   (:lister cm)]
     {:id            abs-path
      :label         (ft/basename abs-path)
      :permissions   (collection-perm-map user abs-path)
-     :hasSubDirs    (> (count (. lister listCollectionsUnderPath abs-path 0)) 0)
-     :date-created  (str (long (. (. list-obj getCreatedAt) getTime)))
-     :date-modified (str (long (. (. list-obj getModifiedAt) getTime)))}))
+     :hasSubDirs    (pos? (count (.listCollectionsUnderPath lister abs-path 0)))
+     :date-created  (str (long (.. list-obj getCreatedAt getTime)))
+     :date-modified (str (long (.. list-obj getModifiedAt getTime)))}))
 
 (defn sub-file-maps
   [user list-obj]
-  (let [abs-path (. list-obj getFormattedAbsolutePath)]
+  (let [abs-path (.getFormattedAbsolutePath list-obj)]
     {:id            abs-path
      :label         (ft/basename abs-path)
      :permissions   (dataobject-perm-map user abs-path)
-     :date-created  (str (long (. (. list-obj getCreatedAt) getTime)))
-     :date-modified (str (long (. (. list-obj getModifiedAt) getTime)))
-     :file-size     (str (. list-obj getDataSize))}))
+     :date-created  (str (long (.. list-obj getCreatedAt getTime)))
+     :date-modified (str (long (.. list-obj getModifiedAt getTime)))
+     :file-size     (str (.getDataSize list-obj))}))
 
 (defn paths-writeable?
   [user paths]
@@ -491,7 +489,11 @@
     Parameters:
       user - A string containing the username of the user requesting the check.
       paths - A sequence of strings containing the paths to be checked."
-  (reduce (fn [f s] (and f s)) (map (fn [p] (is-writeable? user p)) paths)))
+  (reduce 
+    #(and %1 %2) 
+    (map 
+      #(is-writeable? user %) 
+      paths)))
 
 ;;Metadata
 
@@ -504,26 +506,24 @@
   [dir-path]
   "Returns all of the metadata associated with a path." 
   (map
-    (fn [mv]
-      {:attr  (. mv getAvuAttribute)
-       :value (. mv getAvuValue)
-       :unit  (. mv getAvuUnit)})
+    #({:attr  (.getAvuAttribute %1)
+       :value (.getAvuValue %1)
+       :unit  (.getAvuUnit %1)})
     (if (is-dir? dir-path)
-      (. (:collectionAO cm) findMetadataValuesForCollection dir-path)
-      (. (:dataObjectAO cm) findMetadataValuesForDataObject dir-path))))
+      (.findMetadataValuesForCollection (:collectionAO cm) dir-path)
+      (.findMetadataValuesForDataObject (:dataObjectAO cm) dir-path))))
 
 (defn get-attribute
   [dir-path attr]
   "Returns a list of avu maps for set of attributes associated with dir-path"
   (filter
-    (fn [avu-map] 
-      (= (:attr avu-map) attr))
+    #(= (:attr %1) attr)
     (get-metadata dir-path)))
 
 (defn attribute?
   [dir-path attr]
   "Returns true if the path has the associated attribute."
-  (> (count (get-attribute dir-path attr)) 0))
+  (pos? (count (get-attribute dir-path attr))))
 
 (defn set-metadata
   [dir-path attr value unit]
@@ -532,10 +532,10 @@
         cao    (:collectionAO cm)
         dao    (:dataObjectAO cm)
         ao-obj (if (is-dir? dir-path) cao dao)]
-    (if (== 0 (count (get-attribute dir-path attr)))
-      (. ao-obj addAVUMetadata dir-path avu)
+    (if (zero? (count (get-attribute dir-path attr)))
+      (.addAVUMetadata ao-obj dir-path avu)
       (let [old-avu (map2avu (first (get-attribute dir-path attr)))]
-        (. ao-obj modifyAVUMetadata dir-path old-avu avu)))))
+        (.modifyAVUMetadata ao-obj dir-path old-avu avu)))))
 
 (defn delete-metadata
   [dir-path attr]
@@ -545,33 +545,33 @@
         cao    (:collectionAO cm)
         dao    (:dataObjectAO cm)
         ao-obj (if (is-dir? dir-path) cao dao)]
-    (. ao-obj deleteAVUMetadata dir-path avu)))
+    (.deleteAVUMetadata ao-obj dir-path avu)))
 
 (defn list-all
   [dir-path]
   (let [lister (:lister cm)]
-    (. lister listDataObjectsAndCollectionsUnderPath dir-path)))
+    (.listDataObjectsAndCollectionsUnderPath lister dir-path)))
 
 (defn mkdir
   [dir-path]
   (let [fileSystemAO (:fileSystemAO cm)]
-    (. fileSystemAO mkdir (file dir-path) true)))
+    (.mkdir fileSystemAO (file dir-path) true)))
 
 (defn mkdirs
   [dir-path]
-  (. (file dir-path) mkdirs))
+  (.mkdirs (file dir-path)))
 
 (defn delete
   [a-path]
   (let [fileSystemAO (:fileSystemAO cm)
-        resource (file a-path)]
+        resource     (file a-path)]
     (if @use-trash
       (if (is-dir? a-path)
-        (. fileSystemAO directoryDeleteNoForce resource)
-        (. fileSystemAO fileDeleteNoForce resource))
+        (.directoryDeleteNoForce fileSystemAO resource)
+        (.fileDeleteNoForce fileSystemAO resource))
       (if (is-dir? a-path)
-        (. fileSystemAO directoryDeleteForce resource)
-        (. fileSystemAO fileDeleteForce resource)))))
+        (.directoryDeleteForce fileSystemAO resource)
+        (.fileDeleteForce fileSystemAO resource)))))
 
 (defn move
   [source dest]
@@ -579,24 +579,26 @@
         src          (file source)
         dst          (file dest)]
     (if (is-file? source)
-      (. fileSystemAO renameFile src dst)
-      (. fileSystemAO renameDirectory src dst))))
+      (.renameFile fileSystemAO src dst)
+      (.renameDirectory fileSystemAO src dst))))
 
 (defn move-all
   [sources dest]
-  (into [] (map #(move %1 (ft/path-join dest (ft/basename %1))) sources)))
+  (mapv 
+    #(move %1 (ft/path-join dest (ft/basename %1))) 
+    sources))
 
 (defn output-stream
   "Returns an FileOutputStream for a file in iRODS pointed to by 'output-path'."
   [output-path]
   (let [fileFactory (:fileFactory cm)]
-    (. fileFactory instanceIRODSFileOutputStream (file output-path))))
+    (.instanceIRODSFileOutputStream fileFactory (file output-path))))
 
 (defn input-stream
   "Returns a FileInputStream for a file in iRODS pointed to by 'input-path'"
   [input-path]
   (let [fileFactory (:fileFactory cm)]
-    (. fileFactory instanceIRODSFileInputStream (file input-path))))
+    (.instanceIRODSFileInputStream fileFactory (file input-path))))
 
 (defn proxy-input-stream
   [istream cm]
@@ -618,14 +620,14 @@
   [fpath buffer]
   (let [fileFactory (:fileFactory cm)
         read-file   (file fpath)]
-    (. (IRODSFileReader. read-file fileFactory) read buffer)))
+    (.read (IRODSFileReader. read-file fileFactory) buffer)))
 
 (defn shopping-cart
   [filepaths]
   (let [cart (FileShoppingCart/instance)]
     (loop [fps filepaths]
       (.addAnItem cart (ShoppingCartEntry/instance (first fps)))
-      (if (> (count (rest fps)) 0)
+      (if (pos? (count (rest fps)))
         (recur (rest fps))))
     cart))
 
@@ -726,11 +728,9 @@
         rm-zone           #(if (string/split %1 #"\#")
                              (first (string/split %1 #"\#"))
                              "")]
-    (doseq [non-user (into []
-                           (filter
-                            #(not (contains? set-of-new-owners %1))
-                            (map :user curr-user-perms)))]
-      (println (str "Non-users: " non-user))
+    (doseq [non-user (filterv
+                       #(not (contains? set-of-new-owners %1))
+                       (map :user curr-user-perms))]
       (remove-access-permissions non-user abs-path))
     
     (doseq [new-owner set-of-new-owners]

@@ -364,7 +364,7 @@
   [path]
   "Returns status information for a file."
   (let [data-obj (data-object path)]
-    {:type     :dir
+    {:type     :file
      :size     (.getDataSize data-obj)
      :created  (str (long (.. data-obj getUpdatedAt getTime)))
      :modified (str (long (.. data-obj getUpdatedAt getTime)))}))

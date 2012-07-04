@@ -352,6 +352,31 @@
     (is-file? path) (str (long (.. (data-object path) getUpdatedAt getTime)))
     :else             nil))
 
+(defn- dir-stat
+  [path]
+  "Returns status information for a directory."
+  (let [coll (collection path)]
+    {:type     :dir
+     :created  (str (long (.. coll getCreatedAt getTime)))
+     :modified (str (long (.. coll getModifiedAt getTime)))}))
+
+(defn- file-stat
+  [path]
+  "Returns status information for a file."
+  (let [data-obj (data-object path)]
+    {:type     :dir
+     :size     (.getDataSize data-obj)
+     :created  (str (long (.. data-obj getUpdatedAt getTime)))
+     :modified (str (long (.. data-obj getUpdatedAt getTime)))}))
+
+(defn stat
+  [path]
+  "Returns status information for a path."
+  (cond
+   (is-dir? path)  (dir-stat path)
+   (is-file? path) (file-stat path)
+   :else           nil))
+
 (defn file-size
   [path]
   "Returns the size of the file in bytes."

@@ -88,7 +88,8 @@
         ugao        (.getUserGroupAO aof account)
         ff          (.getIRODSFileFactory file-system account)
         fao         (.getIRODSFileSystemAO aof account)
-        lister      (.getCollectionAndDataObjectListAndSearchAO aof account)]
+        lister      (.getCollectionAndDataObjectListAndSearchAO aof account)
+        qao         (.getQuotaAO aof account)]
     {:irodsAccount        account
      :fileSystem          file-system
      :accessObjectFactory aof
@@ -99,6 +100,7 @@
      :fileFactory         ff
      :fileSystemAO        fao
      :lister              lister
+     :quotaAO             qao
      :home                @home
      :zone                @zone}))
 
@@ -836,6 +838,17 @@
   [user ticket-id]
   (init-ticket-session ticket-id)
   (input-stream (.getIrodsAbsolutePath (ticket-by-id user ticket-id))))
+
+(defn quota
+  [user]
+  (let [qmap #(hash-map 
+                :resource (.getResourceName %1)
+                :zone     (.getZoneName %1)
+                :user     (.getUserName %1)
+                :updated  (str (.getTime (.getUpdatedAt %1)))
+                :limit    (str (.getQuotaLimit %1))
+                :over     (str (.getQuotaOver %1)))]
+    (mapv qmap (.listQuotaForAUser (:quotaAO cm) user))))
 
 (defmacro with-jargon
   [& body]

@@ -532,10 +532,10 @@
 (defn get-metadata
   [dir-path]
   "Returns all of the metadata associated with a path." 
-  (map
-    #({:attr  (.getAvuAttribute %1)
-       :value (.getAvuValue %1)
-       :unit  (.getAvuUnit %1)})
+  (mapv
+    #(hash-map :attr  (.getAvuAttribute %1)
+               :value (.getAvuValue %1)
+               :unit  (.getAvuUnit %1))
     (if (is-dir? dir-path)
       (.findMetadataValuesForCollection (:collectionAO cm) dir-path)
       (.findMetadataValuesForDataObject (:dataObjectAO cm) dir-path))))

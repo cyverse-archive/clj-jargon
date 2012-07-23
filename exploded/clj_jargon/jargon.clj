@@ -66,8 +66,7 @@
     (reset! defaultResource ares)
     (reset! max-retries num-retries)
     (reset! retry-sleep sleep)
-    (reset! use-trash recycle)
-    nil))
+    (reset! use-trash recycle)))
 
 (defn account
   [user pass]

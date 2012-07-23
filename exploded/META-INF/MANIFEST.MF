@@ -1,4 +1,0 @@
-Manifest-Version: 1.0
-Built-By: tedgin
-Created-By: Leiningen 1.7.1
-

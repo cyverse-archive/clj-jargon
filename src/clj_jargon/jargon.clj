@@ -259,7 +259,7 @@
       path - String containing a path.
 
     Returns: An instance of IRODSFile representing 'path'."
-  (.instaceIRODSFile (:fileFactory cm) path))
+  (.instanceIRODSFile (:fileFactory cm) path))
 
 (defn exists?
   [path]

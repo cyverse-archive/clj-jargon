@@ -70,8 +70,10 @@
     nil))
 
 (defn account
-  [user pass]
-  (IRODSAccount. @host (Integer/parseInt @port) user pass @home @zone @defaultResource))
+  ([]
+    (account @username @password))
+  ([user pass]
+    (IRODSAccount. @host (Integer/parseInt @port) user pass @home @zone @defaultResource)))
 
 (defn clean-return
   [retval]
@@ -80,28 +82,20 @@
 
 (defn- context-map
   []
-  (let [account     (IRODSAccount. @host (Integer/parseInt @port) @username @password @home @zone @defaultResource)
+  (let [account     (account)
         file-system (IRODSFileSystem/instance)
-        aof         (.getIRODSAccessObjectFactory file-system)
-        cao         (.getCollectionAO aof account)
-        dao         (.getDataObjectAO aof account)
-        uao         (.getUserAO aof account)
-        ugao        (.getUserGroupAO aof account)
-        ff          (.getIRODSFileFactory file-system account)
-        fao         (.getIRODSFileSystemAO aof account)
-        lister      (.getCollectionAndDataObjectListAndSearchAO aof account)
-        qao         (.getQuotaAO aof account)]
+        aof         (.getIRODSAccessObjectFactory file-system)]
     {:irodsAccount        account
      :fileSystem          file-system
      :accessObjectFactory aof
-     :collectionAO        cao
-     :dataObjectAO        dao
-     :userAO              uao
-     :userGroupAO         ugao
-     :fileFactory         ff
-     :fileSystemAO        fao
-     :lister              lister
-     :quotaAO             qao
+     :collectionAO        (.getCollectionAO aof account)
+     :dataObjectAO        (.getDataObjectAO aof account)
+     :userAO              (.getUserAO aof account)
+     :userGroupAO         (.getUserGroupAO aof account)
+     :fileFactory         (.getIRODSFileFactory file-system account)
+     :fileSystemAO        (.getIRODSFileSystemAO aof account)
+     :lister              (.getCollectionAndDataObjectListAndSearchAO aof account)
+     :quotaAO             (.getQuotaAO aof account)
      :home                @home
      :zone                @zone}))
 
@@ -154,11 +148,11 @@
   (let [user-groups  (user-groups user)
         zone         (:zone cm)
         dataObjectAO (:dataObjectAO cm)]
-      (set 
-        (filterv
-          #(not= %1 none-perm)
-          (for [username user-groups]
-            (.getPermissionForDataObject dataObjectAO data-path username zone))))))
+    (set 
+      (filterv
+        #(not= %1 none-perm)
+        (for [username user-groups]
+          (.getPermissionForDataObject dataObjectAO data-path username zone))))))
 
 (defn user-collection-perms
   "Returns a set of permissions that a user has for the collection at
@@ -265,7 +259,7 @@
       path - String containing a path.
 
     Returns: An instance of IRODSFile representing 'path'."
-  (.  (:fileFactory cm) (instanceIRODSFile path)))
+  (.instaceIRODSFile (:fileFactory cm) path))
 
 (defn exists?
   [path]
@@ -275,7 +269,7 @@
       path - String containing a path.
 
     Returns: true if the path exists in iRODS and false otherwise."
-  (.. (file path) exists))
+  (.exists (file path)))
 
 (defn paths-exist?
   [paths]
@@ -285,12 +279,12 @@
       paths - A sequence of strings containing paths.
 
     Returns: Boolean"
-  (zero? (count (for [path paths :when (not (exists? path))] path))))
+  (zero? (count (filter #(not (exists? %)) paths))))
 
 (defn is-file?
   [path]
   "Returns true if the path is a file in iRODS, false otherwise."
-  (.. (. (:fileFactory cm) (instanceIRODSFile path)) isFile))
+  (.isFile (.instanceIRODSFile (:fileFactory cm) path)))
 
 (defn is-dir?
   [path]

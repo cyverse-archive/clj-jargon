@@ -851,16 +851,19 @@
   (init-ticket-session ticket-id)
   (input-stream (.getIrodsAbsolutePath (ticket-by-id user ticket-id))))
 
+(defn quota-map
+  [quota-entry]
+  (hash-map 
+    :resource (.getResourceName quota-entry)
+    :zone     (.getZoneName quota-entry)
+    :user     (.getUserName quota-entry)
+    :updated  (str (.getTime (.getUpdatedAt quota-entry)))
+    :limit    (str (.getQuotaLimit quota-entry))
+    :over     (str (.getQuotaOver quota-entry))))
+
 (defn quota
   [user]
-  (let [qmap #(hash-map 
-                :resource (.getResourceName %1)
-                :zone     (.getZoneName %1)
-                :user     (.getUserName %1)
-                :updated  (str (.getTime (.getUpdatedAt %1)))
-                :limit    (str (.getQuotaLimit %1))
-                :over     (str (.getQuotaOver %1)))]
-    (mapv qmap (.listQuotaForAUser (:quotaAO cm) user))))
+  (mapv quota-map (.listQuotaForAUser (:quotaAO cm) user)))
 
 (defmacro with-jargon
   [& body]

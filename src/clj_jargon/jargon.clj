@@ -291,7 +291,7 @@
   "Returns true if the path is a directory in iRODS, false otherwise."
   (let [ff (:fileFactory cm)
         fixed-path (ft/rm-last-slash path)]
-    (.. (. ff (instanceIRODSFile fixed-path)) isDirectory)))
+    (.isDirectory (.instanceIRODSFile ff fixed-path))))
 
 (defn user-perms->map
   [user-perms-obj]
@@ -314,13 +314,12 @@
 (defn list-paths
   "Returns a list of paths under the parent path. Directories end with /."
   [parent-path]
-  (let [fao (:fileSystemAO cm)]
-    (mapv
-      #(let [full-path (ft/path-join parent-path %1)]
-         (if (is-dir? full-path)
-           (ft/add-trailing-slash full-path)
-           full-path))
-      (.getListInDir fao (file parent-path)))))
+  (mapv
+    #(let [full-path (ft/path-join parent-path %1)]
+       (if (is-dir? full-path)
+         (ft/add-trailing-slash full-path)
+         full-path))
+    (.getListInDir (:fileSystemAO cm) (file parent-path))))
 
 (defn data-object
   [path]
@@ -347,7 +346,7 @@
   (cond
     (is-dir? path)  (str (long (.. (collection path) getCreatedAt getTime)))
     (is-file? path) (str (long (.. (data-object path) getUpdatedAt getTime)))
-    :else             nil))
+    :else           nil))
 
 (defn- dir-stat
   [path]
@@ -551,9 +550,9 @@
   [dir-path attr value unit]
   "Sets an avu for dir-path."
   (let [avu    (AvuData/instance attr value unit)
-        cao    (:collectionAO cm)
-        dao    (:dataObjectAO cm)
-        ao-obj (if (is-dir? dir-path) cao dao)]
+        ao-obj (if (is-dir? dir-path) 
+                 (:collectionAO cm) 
+                 (:dataObjectAO cm))]
     (if (zero? (count (get-attribute dir-path attr)))
       (.addAVUMetadata ao-obj dir-path avu)
       (let [old-avu (map2avu (first (get-attribute dir-path attr)))]
@@ -564,20 +563,18 @@
   "Deletes an avu from dir-path."
   (let [fattr  (first (get-attribute dir-path attr))
         avu    (map2avu fattr)
-        cao    (:collectionAO cm)
-        dao    (:dataObjectAO cm)
-        ao-obj (if (is-dir? dir-path) cao dao)]
+        ao-obj (if (is-dir? dir-path) 
+                 (:collectionAO cm) 
+                 (:dataObjectAO cm))]
     (.deleteAVUMetadata ao-obj dir-path avu)))
 
 (defn list-all
   [dir-path]
-  (let [lister (:lister cm)]
-    (.listDataObjectsAndCollectionsUnderPath lister dir-path)))
+  (.listDataObjectsAndCollectionsUnderPath (:lister cm) dir-path))
 
 (defn mkdir
   [dir-path]
-  (let [fileSystemAO (:fileSystemAO cm)]
-    (.mkdir fileSystemAO (file dir-path) true)))
+  (.mkdir (:fileSystemAO cm) (file dir-path) true))
 
 (defn mkdirs
   [dir-path]
@@ -613,14 +610,12 @@
 (defn output-stream
   "Returns an FileOutputStream for a file in iRODS pointed to by 'output-path'."
   [output-path]
-  (let [fileFactory (:fileFactory cm)]
-    (.instanceIRODSFileOutputStream fileFactory (file output-path))))
+  (.instanceIRODSFileOutputStream (:fileFactory cm) (file output-path)))
 
 (defn input-stream
   "Returns a FileInputStream for a file in iRODS pointed to by 'input-path'"
   [input-path]
-  (let [fileFactory (:fileFactory cm)]
-    (.instanceIRODSFileInputStream fileFactory (file input-path))))
+  (.instanceIRODSFileInputStream (:fileFactory cm) (file input-path)))
 
 (defn proxy-input-stream
   [istream cm]
@@ -640,9 +635,7 @@
 
 (defn read-file
   [fpath buffer]
-  (let [fileFactory (:fileFactory cm)
-        read-file   (file fpath)]
-    (.read (IRODSFileReader. read-file fileFactory) buffer)))
+  (.read (IRODSFileReader. (file fpath) (:fileFactory cm)) buffer))
 
 (defn shopping-cart
   [filepaths]
@@ -655,16 +648,22 @@
 
 (defn temp-password
   [user]
-  (let [uao (:userAO cm)]
-    (.getTemporaryPasswordForASpecifiedUser uao user)))
+  (.getTemporaryPasswordForASpecifiedUser (:userAO cm) user))
+
+(defn cart-service
+  []
+  (ShoppingCartServiceImpl. 
+    (:accessObjectFactory cm) 
+    (:irodsAccount cm) 
+    (DataCacheServiceFactoryImpl. (:accessObjectFactory cm))))
 
 (defn store-cart
   [user cart-key filepaths]
-  (let [aof      (:accessObjectFactory cm)
-        account  (:irodsAccount cm)
-        cart-svc (ShoppingCartServiceImpl. aof account (DataCacheServiceFactoryImpl. aof))
-        cart     (shopping-cart filepaths)]
-    (.serializeShoppingCartAsSpecifiedUser cart-svc cart cart-key user)))
+  (.serializeShoppingCartAsSpecifiedUser 
+    (cart-service) 
+    (shopping-cart filepaths) 
+    cart-key 
+    user))
 
 (defn permissions
   [user fpath]
@@ -684,39 +683,51 @@
   [user fpath]
   (cond
    (is-file? fpath)
-   (let [dataobj (:dataObjectAO cm)
-         zone    (:zone cm)]
-     (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user))
+   (.removeAccessPermissionsForUserInAdminMode 
+     (:dataObjectAO cm) 
+     (:zone cm) 
+     fpath 
+     user)
    
    (is-dir? fpath)
-   (let [coll (:collectionAO cm)
-         zone (:zone cm)]
-     (.removeAccessPermissionForUserAsAdmin coll zone fpath user true))))
+   (.removeAccessPermissionForUserAsAdmin 
+     (:collectionAO cm) 
+     (:zone cm) 
+     fpath 
+     user 
+     true)))
+
+(defn set-dataobj-perms
+  [user fpath read? write? own?]
+  (let [dataobj (:dataObjectAO cm)
+        zone    (:zone cm)] 
+    (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)           
+    (cond
+      own?   (.setAccessPermissionOwnInAdminMode dataobj zone fpath user)
+      write? (.setAccessPermissionWriteInAdminMode dataobj zone fpath user)
+      read?  (.setAccessPermissionReadInAdminMode dataobj zone fpath user))))
+
+(defn set-coll-perms
+  [user fpath read? write? own? recursive?]
+  (let [coll    (:collectionAO cm)
+        zone    (:zone cm)]
+    (.removeAccessPermissionForUserAsAdmin coll zone fpath user recursive?)
+    
+    (cond
+      own?   (.setAccessPermissionOwnAsAdmin coll zone fpath user recursive?)
+      write? (.setAccessPermissionWriteAsAdmin coll zone fpath user recursive?)
+      read?  (.setAccessPermissionReadAsAdmin coll zone fpath user recursive?))))
 
 (defn set-permissions
   ([user fpath read? write? own?]
      (set-permissions user fpath read? write? own? false))
   ([user fpath read? write? own? recursive?]
-     (cond
+    (cond
       (is-file? fpath)
-      (let [dataobj (:dataObjectAO cm)
-            zone    (:zone cm)]
-        (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)
-
-        (cond
-         own?   (.setAccessPermissionOwnInAdminMode dataobj zone fpath user)
-         write? (.setAccessPermissionWriteInAdminMode dataobj zone fpath user)
-         read?  (.setAccessPermissionReadInAdminMode dataobj zone fpath user)))
+      (set-dataobj-perms user fpath read? write? own?)
       
       (is-dir? fpath)
-      (let [coll (:collectionAO cm)
-            zone (:zone cm)]
-        (.removeAccessPermissionForUserAsAdmin coll zone fpath user recursive?)
-
-        (cond
-         own?   (.setAccessPermissionOwnAsAdmin coll zone fpath user recursive?)
-         write? (.setAccessPermissionWriteAsAdmin coll zone fpath user recursive?)
-         read?  (.setAccessPermissionReadAsAdmin coll zone fpath user recursive?))))))
+      (set-coll-perms user fpath read? write? own? recursive?))))
 
 (defn owns?
   [user fpath]
@@ -734,25 +745,31 @@
   [user abs-path]
   (cond
    (is-file? abs-path)
-   (let [dataobj (:dataObjectAO cm)
-         zone    (:zone cm)]
-     (.removeAccessPermissionsForUserInAdminMode dataobj zone abs-path user))
+   (.removeAccessPermissionsForUserInAdminMode 
+     (:dataObjectAO cm) 
+     (:zone cm) 
+     abs-path 
+     user)
 
    (is-dir? abs-path)
-   (let [coll (:collectionAO cm)
-         zone (:zone cm)]
-     (.removeAccessPermissionForUserAsAdmin coll zone abs-path user false))))
+   (.removeAccessPermissionForUserAsAdmin 
+     (:collectionAO cm) 
+     (:zone cm) 
+     abs-path 
+     user 
+     false)))
+
+(defn removed-owners
+  [curr-user-perms set-of-new-owners]
+  (filterv
+    #(not (contains? set-of-new-owners %1))
+    (map :user curr-user-perms)))
 
 (defn fix-owners
   [abs-path & owners]
   (let [curr-user-perms   (list-user-perms abs-path)
-        set-of-new-owners (set owners)
-        rm-zone           #(if (string/split %1 #"\#")
-                             (first (string/split %1 #"\#"))
-                             "")]
-    (doseq [non-user (filterv
-                       #(not (contains? set-of-new-owners %1))
-                       (map :user curr-user-perms))]
+        set-of-new-owners (set owners)]
+    (doseq [non-user (removed-owners curr-user-perms set-of-new-owners)]
       (remove-access-permissions non-user abs-path))
     
     (doseq [new-owner set-of-new-owners]
@@ -771,13 +788,13 @@
    and the uses limit."
   [ticket-id tas 
    {:keys [byte-write-limit expiry file-write-limit uses-limit]}]
-  (if byte-write-limit
+  (when byte-write-limit
     (.setTicketByteWriteLimit tas ticket-id byte-write-limit))
-  (if expiry
+  (when expiry
     (.setTicketExpiration tas ticket-id expiry))
-  (if file-write-limit
+  (when file-write-limit
     (.setTicketFileWriteLimit tas ticket-id file-write-limit))
-  (if uses-limit
+  (when uses-limit
     (.setTicketUsesLimit tas ticket-id uses-limit)))
 
 (defn create-ticket

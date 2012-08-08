@@ -17,13 +17,13 @@
             ShoppingCartEntry 
             ShoppingCartServiceImpl]
            [java.io FileInputStream]
-           [org.irods.jargon.ticket 
+           #_([org.irods.jargon.ticket 
             TicketServiceFactoryImpl 
             TicketAdminServiceImpl
             TicketClientSupport]
            [org.irods.jargon.ticket.packinstr
             TicketInp
-            TicketCreateModeEnum]))
+            TicketCreateModeEnum])))
 
 (def read-perm FilePermissionEnum/READ)
 (def write-perm FilePermissionEnum/WRITE)
@@ -764,7 +764,7 @@
     (doseq [new-owner set-of-new-owners]
       (set-owner abs-path new-owner))))
 
-(defn ticket-admin-service
+#_((defn ticket-admin-service
   "Creates an instance of TicketAdminService, which provides
    access to utility methods for performing operations on tickets.
    Probably doesn't need to be called directly."
@@ -838,7 +838,7 @@
 (defn ticket-input-stream
   [user ticket-id]
   (init-ticket-session ticket-id)
-  (input-stream (.getIrodsAbsolutePath (ticket-by-id user ticket-id))))
+  (input-stream (.getIrodsAbsolutePath (ticket-by-id user ticket-id)))))
 
 (defn quota
   [user]

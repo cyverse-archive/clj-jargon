@@ -768,8 +768,13 @@
 (defn fix-owners
   [abs-path & owners]
   (let [curr-user-perms   (list-user-perms abs-path)
-        set-of-new-owners (set owners)]
-    (doseq [non-user (removed-owners curr-user-perms set-of-new-owners)]
+        set-of-new-owners (set owners)
+        rm-zone           #(if (string/split %1 #"\#")
+                             (first (string/split %1 #"\#"))
+                             "")]
+    (doseq [non-user (filterv
+                      #(not (contains? set-of-new-owners %1))
+                      (map :user curr-user-perms))]
       (remove-access-permissions non-user abs-path))
     
     (doseq [new-owner set-of-new-owners]

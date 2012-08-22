@@ -870,6 +870,16 @@
   [user]
   (mapv quota-map (.listQuotaForAUser (:quotaAO cm) user)))
 
+(defn data-transfer-obj
+  []
+  (.getDataTransferOperations (:accessObjectFactory cm) (:irodsAccount cm)))
+
+(defn copy
+  [source dest] 
+  (let [dto (data-transfer-obj)
+        res (or @defaultResource "demoResc")]
+    (.copy dto source res dest nil nil)))
+
 (defmacro with-jargon
   [& body]
   `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]

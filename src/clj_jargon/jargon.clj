@@ -34,6 +34,19 @@
 (def with-jargon-index (ref 0))
 (def ^:dynamic curr-with-jargon-index nil)
 
+(defprotocol IRODSProxy
+  "These are the org.irods.jargon.core.pub.IRODSFileSystem methods that need to 
+    be implemented by a proxy for a mock iRODS repository so that this library 
+    can use it instead of an actual iRODS repository.  These methods must be 
+    semantically equivalent to the IRODSFileSystem methods with the same name."
+  (close [_])
+  (getIRODSAccessObjectFactory [_])
+  (getIRODSFileFactory [_ irods-account]))
+  
+(def default-proxy-ctor 
+  "This is the default constructor for creating an iRODS proxy."
+  #(IRODSFileSystem/instance))
+
 (defn init
   "Creates the iRODS configuration map.
    
@@ -52,13 +65,19 @@
         retries.  This defaults to 0.
       use-trash - Indicates whether or to put deleted entries in the trash.  
         This defaults to false.
+      proxy-ctor - This is the constructor to use for creating the iRODS proxy.
+        It takes no arguments, and the object its creates must implement the
+        IRODSProxy protocol.  This defaults to default-proxy-ctor.
 
     Returns:
       A map is returned with the provided parameters names and values forming
       the key-value pairs."
-  ([host port user pass home zone res]
-    (init host port user pass home zone res 0 0 false))
-  ([host port user pass home zone res num-retries sleep recycle]
+  [host port user pass home zone res 
+   & {:keys [max-retries retry-sleep use-trash proxy-ctor] 
+      :or   {max-retries 0
+             retry-sleep 0
+             use-trash   false
+             proxy-ctor  default-proxy-ctor}}]
     {:host            host
      :port            port
      :username        user
@@ -66,9 +85,10 @@
      :home            home
      :zone            zone
      :defaultResource res
-     :max-retries     num-retries
-     :retry-sleep     sleep
-     :use-trash       recycle}))
+     :max-retries     max-retries
+     :retry-sleep     retry-sleep
+     :use-trash       use-trash
+     :proxy-ctor      proxy-ctor})
 
 (defn account
   ([cfg]
@@ -90,7 +110,7 @@
 (defn- context-map
   [cfg]
   (let [acnt        (account cfg)
-        file-system (IRODSFileSystem/instance)
+        file-system ((:proxy-ctor cfg))
         aof         (.getIRODSAccessObjectFactory file-system)]
     (assoc cfg 
            :irodsAccount        acnt
@@ -744,7 +764,7 @@
 (defn set-permissions
   ([cm user fpath read? write? own?]
      (set-permissions cm user fpath read? write? own? false))
-  ([user fpath read? write? own? recursive?]
+  ([cm user fpath read? write? own? recursive?]
     (cond
       (is-file? cm fpath)
       (set-dataobj-perms cm user fpath read? write? own?)
@@ -910,9 +930,9 @@
     cm-sym to access the iRODS context.
 
     Parameters:
+      cfg - The Jargon configuration used to connect to iRODS.
       [cm-sym] - Holds the name of the binding to the iRODS context map used by 
         the body expressions.
-      cfg - The Jargon configuration used to connect to iRODS.
       body - Zero or more expressions to be evaluated while an iRODS connection
         is open.
 
@@ -922,13 +942,14 @@
     Example:
       (def config (init ...))
 
-      (with-jargon [ctx] config
+      (with-jargon config
+        [ctx] 
         (list-all ctx \"/zone/home/user/\"))
 
     * If an IRODSFileInputStream is the result of the last body expression, the
       iRODS connection is not closed.  Instead, an special InputStream is 
       returned than when closed, closes the iRODS connection is well."
-  [[cm-sym] cfg & body]
+  [cfg [cm-sym] & body]
   `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
      (log/debug "curr-with-jargon-index:" curr-with-jargon-index)
      (let [~cm-sym (create-jargon-context-map ~cfg)

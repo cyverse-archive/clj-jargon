@@ -1,6 +1,5 @@
 (ns clj-jargon.test.core
-  (:use [clj-jargon.core])
-  (:use [clojure.test]))
+  (:use clojure.test)
+  (:require clj-jargon.test.jargon))
 
-(deftest replace-me ;; FIXME: write
-  (is false "No tests have been written."))
+(run-tests 'clj-jargon.test.jargon)

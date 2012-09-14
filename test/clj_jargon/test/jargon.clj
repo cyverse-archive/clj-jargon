@@ -1,7 +1,6 @@
 (ns clj-jargon.test.jargon
   (:use clojure.test
         clj-jargon.jargon)
-  (:require [clojure.set :as s])
   (:import [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.core.pub CollectionAO
                                       CollectionAndDataObjectListAndSearchAO

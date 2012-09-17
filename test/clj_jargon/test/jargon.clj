@@ -1,7 +1,8 @@
 (ns clj-jargon.test.jargon
   (:use clojure.test
         clj-jargon.jargon)
-  (:require [clojure.set :as s])
+  (:require [boxy.core :as bc]
+            [boxy.jargon-if :as bj])
   (:import [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.core.pub CollectionAO
                                       CollectionAndDataObjectListAndSearchAO
@@ -14,40 +15,8 @@
            [org.irods.jargon.core.pub.io IRODSFileFactory]))
 
 
-(defrecord ^{:private true} MockAOFactory []
-  IRODSAccessObjectFactory
-  
-  (getCollectionAO
-    [_ acnt] 
-    (proxy [CollectionAO] []))
-
-  (getCollectionAndDataObjectListAndSearchAO 
-    [_ acnt] 
-    (proxy [CollectionAndDataObjectListAndSearchAO] []))
-  
-  (getDataObjectAO 
-    [_ acnt] 
-    (proxy [DataObjectAO] []))
-
-  (getIRODSFileSystemAO 
-    [_ acnt] 
-    (proxy [IRODSFileSystemAO] []))
-
-  (getQuotaAO 
-    [_ acnt]
-    (proxy [QuotaAO] []))
-
-  (getUserAO 
-    [_ acnt] 
-    (proxy [UserAO] []))
-
-  (getUserGroupAO 
-    [_ acnt] 
-    (proxy [UserGroupAO] [])))
-
-
 (defrecord ^{:private true} IRODSProxyStub [closed-ref?]  
-  IRODSProxy
+  bj/IRODSProxy
   
   (close 
     [_]
@@ -55,11 +24,11 @@
 
   (getIRODSAccessObjectFactory 
     [_] 
-    (->MockAOFactory))
+    (bc/mk-mock-ao-factory nil))
 
   (getIRODSFileFactory 
     [_ acnt]
-    (proxy [IRODSFileFactory] [])))
+    (bc/->MockFileFactory nil nil)))
                                    
                                    
 (deftest test-simple-init

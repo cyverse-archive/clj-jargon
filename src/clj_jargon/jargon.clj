@@ -34,15 +34,6 @@
 (def with-jargon-index (ref 0))
 (def ^:dynamic curr-with-jargon-index nil)
 
-(defprotocol IRODSProxy
-  "These are the org.irods.jargon.core.pub.IRODSFileSystem methods that need to 
-    be implemented by a proxy for a mock iRODS repository so that this library 
-    can use it instead of an actual iRODS repository.  These methods must be 
-    semantically equivalent to the IRODSFileSystem methods with the same name."
-  (close [_])
-  (getIRODSAccessObjectFactory [_])
-  (getIRODSFileFactory [_ irods-account]))
-  
 (def default-proxy-ctor 
   "This is the default constructor for creating an iRODS proxy."
   #(IRODSFileSystem/instance))
@@ -66,8 +57,14 @@
       use-trash - Indicates whether or to put deleted entries in the trash.  
         This defaults to false.
       proxy-ctor - This is the constructor to use for creating the iRODS proxy.
-        It takes no arguments, and the object its creates must implement the
-        IRODSProxy protocol.  This defaults to default-proxy-ctor.
+        It takes no arguments, and the object its creates must implement have
+        the following methods.
+        ((close [_])
+         (^IRODSAccessObjectFactory getIRODSAccessObjectFactory [_])
+         (^IRODSFileFactory getIRODSFileFactory [_ ^IRODSAccount acnt]))
+        These must be sematically equivalent to the corresponding methods in
+        org.irods.jargon.core.pub.IRODSFileSystem.  This argument defaults to 
+        default-proxy-ctor.
 
     Returns:
       A map is returned with the provided parameters names and values forming

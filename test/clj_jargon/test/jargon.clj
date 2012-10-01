@@ -15,7 +15,27 @@
            [org.irods.jargon.core.pub.io IRODSFileFactory]))
 
 
-(defrecord ^{:private true} IRODSProxyStub [closed-ref?]  
+(def ^{:private true} init-repo
+  {:groups                {}
+   "/zone"                {:type :normal-dir
+                           :acl  {}
+                           :avus {}}
+   "/zone/home"           {:type :normal-dir
+                           :acl  {}
+                           :avus {}}
+   "/zone/home/user"      {:type :normal-dir
+                           :acl  {}
+                           :avus {}}
+   "/zone/home/user/file" {:type    :file
+                           :acl     {}
+                           :avus    {}
+                           :content ""}
+   "/zone/home/user/link" {:type :linked-dir
+                           :acl  {}
+                           :avus {}}})
+
+
+(defrecord ^{:private true} IRODSProxyStub [repo-ref closed-ref?]  
   bj/IRODSProxy
   
   (close 
@@ -24,11 +44,11 @@
 
   (getIRODSAccessObjectFactory 
     [_] 
-    (bc/mk-mock-ao-factory nil))
+    (bc/mk-mock-ao-factory repo-ref))
 
   (getIRODSFileFactory 
     [_ acnt]
-    (bc/->MockFileFactory nil nil)))
+    (bc/mk-mock-file-factory repo-ref acnt)))
                                    
                                    
 (deftest test-simple-init
@@ -60,9 +80,18 @@
 
 (deftest test-with-jargon
   (let [closed?   (atom false)
-        test-ctor #(->IRODSProxyStub closed?)
-        cfg       (init "host" "0" "user" "passwd" "home" "zone" "resource" 
-                        :proxy-ctor  test-ctor)]
+        test-ctor #(->IRODSProxyStub (atom init-repo) closed?)
+        cfg       {:host            "host" 
+                   :port            "0" 
+                   :username        "user" 
+                   :password        "passwd" 
+                   :home            "/zone/home/user" 
+                   :zone            "zone" 
+                   :defaultResource "resource"
+                   :max-retries     0
+                   :retry-sleep     0
+                   :use-trash       false
+                   :proxy-ctor      test-ctor}]
     (with-jargon cfg [cm]
       (doall (map 
                #(is (= (% cfg) (% cm))) 
@@ -80,4 +109,51 @@
       (is (instance? QuotaAO (:quotaAO cm)))
       (is (not @closed?)))
     (is @closed?)))
+
+
+(deftest test-is-linked-dir?
+  ;; This hideous monstrousity of a let binding was created to make the test of
+  ;; is-linked-dir? independent of the test of with-jargon.  Better would be to 
+  ;; split the src/jargon.clj into two modules, one with the init and
+  ;; with-jargon functions and their friends; the other with the functions
+  ;; requiring a context map.
+  (let [host "host"
+        port  1294
+        user  "user"
+        pass "passwd"
+        home "/zone/home/user"
+        zone "zone"
+        res  "resource"
+        acnt (IRODSAccount. host port user pass home zone res)
+        ctor #(->IRODSProxyStub (atom init-repo) (atom false))
+        fs   (ctor)
+        aof  (.getIRODSAccessObjectFactory fs)
+        cm   {:host                host 
+              :port                (Integer/toString port) 
+              :username            user
+              :password            pass 
+              :home                home 
+              :zone                zone 
+              :defaultResource     res
+              :max-retries         0
+              :retry-sleep         0
+              :use-trash           false
+              :proxy-ctor          ctor
+              :irodsAccount        acnt
+              :fileSystem          fs
+              :accessObjectFactory aof
+              :collectionAO        (.getCollectionAO aof acnt)
+              :dataObjectAO        (.getDataObjectAO aof acnt)
+              :userAO              (.getUserAO aof acnt)
+              :userGroupAO         (.getUserGroupAO aof acnt)
+              :fileFactory         (.getIRODSFileFactory fs acnt)
+              :fileSystemAO        (.getIRODSFileSystemAO aof acnt)
+              :lister              (.getCollectionAndDataObjectListAndSearchAO 
+                                     aof 
+                                     acnt)
+              :quotaAO             (.getQuotaAO aof acnt)}]
+    (is (true? (is-linked-dir? cm "/zone/home/user/link")))
+    (is (false? (is-linked-dir? cm "/zone")))
+    (is (false? (is-linked-dir? cm "zone/home/user/file")))
+    (is (false? (is-linked-dir? cm "/zone/missing")))))
     

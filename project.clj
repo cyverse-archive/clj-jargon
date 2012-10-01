@@ -9,7 +9,7 @@
                  [org.irods.jargon/jargon-security "3.2.0-SNAPSHOT"]
                  [org.irods.jargon/jargon-ticket "3.2.0-SNAPSHOT"]
                  [org.clojure/tools.logging "0.2.3"]]
-  :profiles {:dev {:dependencies [[org.iplantc/boxy "0.0.1-SNAPSHOT"]]}}
+  :profiles {:dev {:dependencies [[org.iplantc/boxy "0.1.0-SNAPSHOT"]]}}
   :repositories {"iplantCollaborative"
                  "http://projects.iplantcollaborative.org/archiva/repository/internal/"
                  

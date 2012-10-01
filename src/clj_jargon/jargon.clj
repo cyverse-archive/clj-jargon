@@ -4,7 +4,9 @@
             [clojure.string :as string])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum]
-           [org.irods.jargon.core.pub.domain AvuData]
+           [org.irods.jargon.core.pub.domain 
+            AvuData
+            ObjStat$SpecColType]
            [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.core.pub IRODSFileSystem]
            [org.irods.jargon.core.pub.io 
@@ -316,6 +318,24 @@
   (let [ff (:fileFactory cm)
         fixed-path (ft/rm-last-slash path)]
     (.isDirectory (.instanceIRODSFile ff fixed-path))))
+
+(defn is-linked-dir?
+  [cm path]
+  "Indicates whether or not a directory (collection) is actually a link to a
+   directory (linked collection).
+
+   Parameters:
+     cm - the context map
+     path - the absolute path to the directory to check.
+
+   Returns:
+     It returns true if the path points to a linked directory, otherwise it
+     returns false."
+  (= ObjStat$SpecColType/LINKED_COLL 
+     (.. (:fileFactory cm) 
+       (instanceIRODSFile (ft/rm-last-slash path)) 
+       initializeObjStatForFile 
+       getSpecColType)))
 
 (defn user-perms->map
   [user-perms-obj]

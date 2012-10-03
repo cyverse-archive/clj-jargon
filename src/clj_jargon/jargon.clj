@@ -151,7 +151,7 @@
   "Returns a set of permissions that user has for the dataobject at
    data-path. Takes into account the groups that a user is in."
   [user data-path]
-  (let [user-groups  (user-groups user)
+  (let [user-groups  (conj (user-groups user) user) 
         zone         (:zone cm)
         dataObjectAO (:dataObjectAO cm)]
       (set 
@@ -164,7 +164,7 @@
   "Returns a set of permissions that a user has for the collection at
    data-path. Takes into account the groups that a user is in. "
   [user coll-path]
-  (let [user-groups  (user-groups user)
+  (let [user-groups  (conj (user-groups user) user) 
         zone         (:zone cm)
         collectionAO (:collectionAO cm)]
     (set 

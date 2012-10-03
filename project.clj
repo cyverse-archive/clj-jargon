@@ -8,14 +8,15 @@
                  [org.irods.jargon/jargon-security "3.2.0-beta1"]
                  [org.irods.jargon/jargon-ticket "3.2.0-beta1"]
                  [org.clojure/tools.logging "0.2.3"]]
-  :repositories {"iplantCollaborative"
-                 "http://projects.iplantcollaborative.org/archiva/repository/internal/"
-                 
-                 "renci.repository.releases"
-                 "http://ci-dev.renci.org/nexus/content/repositories/releases/"
-
-                 "renci.repository.snapshots"
-                 "http://ci-dev.renci.org/nexus/content/repositories/snapshots/"
-                 
-                 "sonatype"
-                 "http://oss.sonatype.org/content/repositories/releases"})
+  :repositories
+  {"iplantCollaborative"
+   "http://projects.iplantcollaborative.org/archiva/repository/internal/"
+   
+   "renci.repository.releases"
+   "http://ci-dev.renci.org/nexus/content/repositories/releases/"
+   
+   "renci.repository.snapshots"
+   "http://ci-dev.renci.org/nexus/content/repositories/snapshots/"
+   
+   "sonatype"
+   "http://oss.sonatype.org/content/repositories/releases"})

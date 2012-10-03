@@ -2,16 +2,19 @@
   :description "Clojure API on top of iRODS's jargon-core."
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.iplantc/clojure-commons "1.1.0-SNAPSHOT"]
-                 [org.irods.jargon/jargon-core "3.2.0-SNAPSHOT"]
-                 [org.irods.jargon/jargon-data-utils "3.2.0-SNAPSHOT"]
-                 [org.irods.jargon.transfer/jargon-transfer-engine "3.2.0-SNAPSHOT"]
-                 [org.irods.jargon/jargon-security "3.2.0-SNAPSHOT"]
-                 [org.irods.jargon/jargon-ticket "3.2.0-SNAPSHOT"]
+                 [org.irods.jargon/jargon-core "3.2.0-beta1"]
+                 [org.irods.jargon/jargon-data-utils "3.2.0-beta1"]
+                 [org.irods.jargon.transfer/jargon-transfer-engine "3.2.0-beta1"]
+                 [org.irods.jargon/jargon-security "3.2.0-beta1"]
+                 [org.irods.jargon/jargon-ticket "3.2.0-beta1"]
                  [org.clojure/tools.logging "0.2.3"]]
   :repositories {"iplantCollaborative"
                  "http://projects.iplantcollaborative.org/archiva/repository/internal/"
                  
-                 "renci.repository"
+                 "renci.repository.releases"
+                 "http://ci-dev.renci.org/nexus/content/repositories/releases/"
+
+                 "renci.repository.snapshots"
                  "http://ci-dev.renci.org/nexus/content/repositories/snapshots/"
                  
                  "sonatype"

@@ -356,7 +356,15 @@
       (.listPermissionsForCollection (:collectionAO cm) abs-path))))
 
 (defn list-paths
-  "Returns a list of paths under the parent path. Directories end with /."
+  "Returns a list of paths for the entries under the parent path.  This is not
+   recursive.  Directories end with /.
+
+   Parameters:
+     cm - The context map
+     parent-path - The path of the parrent collection (directory).
+
+   Returns:
+     It returns a list path names for the entries under the parent."
   [cm parent-path]
   (mapv
     #(let [full-path (ft/path-join parent-path %1)]

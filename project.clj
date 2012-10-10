@@ -2,12 +2,12 @@
   :description "Clojure API on top of iRODS's jargon-core."
   :dependencies [[org.clojure/clojure "1.4.0"]         
                  [org.iplantc/clojure-commons "1.1.0-SNAPSHOT"]
-                 [org.irods.jargon/jargon-core "3.2.0-beta1"
+                 [org.irods.jargon/jargon-core "3.2.0"
                   :exclusions [org.jglobus/JGlobus-Core]]
-                 [org.irods.jargon/jargon-data-utils "3.2.0-beta1"]
-                 [org.irods.jargon.transfer/jargon-transfer-engine "3.2.0-beta1"]
-                 [org.irods.jargon/jargon-security "3.2.0-beta1"]
-                 [org.irods.jargon/jargon-ticket "3.2.0-beta1"]
+                 [org.irods.jargon/jargon-data-utils "3.2.0"]
+                 [org.irods.jargon.transfer/jargon-transfer-engine "3.2.0"]
+                 [org.irods.jargon/jargon-security "3.2.0"]
+                 [org.irods.jargon/jargon-ticket "3.2.0"]
                  [org.clojure/tools.logging "0.2.3"]]
   :profiles {:dev {:dependencies [[org.iplantc/boxy "0.1.0-SNAPSHOT"]]}}
   :repositories

@@ -16,7 +16,8 @@
 
 
 (def ^{:private true} init-repo
-  {:groups                {}
+  {:users                 #{"user"}
+   :groups                {}
    "/zone"                {:type :normal-dir
                            :acl  {}
                            :avus {}}
@@ -27,7 +28,7 @@
                            :acl  {}
                            :avus {}}
    "/zone/home/user/file" {:type    :file
-                           :acl     {}
+                           :acl     {"user" :read}
                            :avus    {}
                            :content ""}
    "/zone/home/user/link" {:type :linked-dir
@@ -155,11 +156,23 @@
     (is @closed?)))
 
 
+(deftest test-dataobject-readable?
+  (is (true? (dataobject-readable? (mk-cm) "user" "/zone/home/user/file"))))
+  
+  
 (deftest test-list-paths
   (let [cm (mk-cm)]
     (is (= ["/zone/home/"] (list-paths cm "/zone/") ))))
 
 
+(deftest test-is-file?
+  (is (true? (is-file? (mk-cm) "/zone/home/user/file"))))
+
+    
+(deftest test-is-dir? 
+  (is (false? (is-dir? (mk-cm) "/zone/home/user/file"))))
+
+    
 (deftest test-is-linked-dir?
   (let [cm (mk-cm)]
     (is (true? (is-linked-dir? cm "/zone/home/user/link")))
@@ -167,3 +180,10 @@
     (is (false? (is-linked-dir? cm "zone/home/user/file")))
     (is (false? (is-linked-dir? cm "/zone/missing")))))
     
+
+(deftest test-user-exists?
+  (is (true? (user-exists? (mk-cm) "user"))))
+
+
+(deftest test-is-readable?
+  (is (true? (is-readable? (mk-cm) "user" "/zone/home/user/file"))))

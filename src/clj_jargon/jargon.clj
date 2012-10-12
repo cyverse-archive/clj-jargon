@@ -236,7 +236,8 @@
   "Checks to see if the user has read permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
-  (dataobject-perm? cm user data-path read-perm))
+  (or (dataobject-perm? cm user data-path read-perm)
+      (dataobject-perm? cm user data-path write-perm)))
   
 (defn dataobject-writeable?
   "Checks to see if the user has write permissions on data-path. Only

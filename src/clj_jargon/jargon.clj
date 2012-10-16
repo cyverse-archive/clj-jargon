@@ -452,10 +452,12 @@
       cm - The iRODS context map
       path - The path whose owner is being set.
       owner - The username of the user who will be the owner of 'path'."
-  (if (is-file? cm path)
-    (.setAccessPermissionOwn (:dataObjectAO cm) (:zone cm) path owner)
-    (if (is-dir? cm path)
-      (.setAccessPermissionOwn (:collectionAO cm) (:zone cm) path owner true))))
+  (cond
+   (is-file? cm path)
+   (.setAccessPermissionOwn (:dataObjectAO cm) (:zone cm) path owner)
+
+   (is-dir? cm path)
+   (.setAccessPermissionOwn (:collectionAO cm) (:zone cm) path owner true)))
 
 (defn set-inherits
   [cm path]
@@ -476,14 +478,17 @@
       user - String containign a username.
       path - String containing an absolute path for something in iRODS."
   (cond
-    (not (user-exists? cm user)) false
-    (is-dir? cm path)            (collection-writeable? cm 
-                                                        user 
-                                                        (ft/rm-last-slash path))
-    (is-file? cm path)           (dataobject-writeable? cm 
-                                                        user 
-                                                        (ft/rm-last-slash path))
-    :else                        false))
+   (not (user-exists? cm user))
+   false
+
+   (is-dir? cm path)
+   (collection-writeable? cm user (ft/rm-last-slash path))
+
+   (is-file? cm path)
+   (dataobject-writeable? cm user (ft/rm-last-slash path))
+
+   :else
+   false))
 
 (defn is-readable?
   [cm user path]
@@ -494,14 +499,17 @@
       user - String containing a username.
       path - String containing an path for something in iRODS."
   (cond
-    (not (user-exists? cm user)) false
-    (is-dir? cm path)            (collection-readable? cm
-                                                       user 
-                                                       (ft/rm-last-slash path))
-    (is-file? cm path)           (dataobject-readable? cm 
-                                                       user 
-                                                       (ft/rm-last-slash path))
-    :else                        false))
+   (not (user-exists? cm user))
+   false
+
+   (is-dir? cm path)
+   (collection-readable? cm user (ft/rm-last-slash path))
+   
+   (is-file? cm path)
+   (dataobject-readable? cm user (ft/rm-last-slash path))
+   
+   :else
+   false))
 
 (defn last-dir-in-path
   [cm path]

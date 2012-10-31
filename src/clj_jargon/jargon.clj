@@ -12,6 +12,10 @@
            [org.irods.jargon.core.pub.io 
             IRODSFileReader 
             IRODSFileInputStream]
+           [org.irods.jargon.core.query
+            IRODSGenQueryBuilder
+            QueryConditionOperators
+            RodsGenQueryEnum]
            [org.irods.jargon.datautils.datacache 
             DataCacheServiceFactoryImpl]
            [org.irods.jargon.datautils.shoppingcart 
@@ -123,7 +127,8 @@
            :fileSystemAO        (.getIRODSFileSystemAO aof acnt)
            :lister              (.getCollectionAndDataObjectListAndSearchAO aof 
                                                                             acnt)
-           :quotaAO             (.getQuotaAO aof acnt))))
+           :quotaAO             (.getQuotaAO aof acnt)
+           :executor            (.getIRODSGenQueryExecutor aof acnt))))
 
 (defn- log-value
   [msg value]
@@ -636,6 +641,46 @@
                  (:collectionAO cm) 
                  (:dataObjectAO cm))]
     (.deleteAVUMetadata ao-obj dir-path avu)))
+
+(defn- op->constant
+  [op]
+  (or ({:between         QueryConditionOperators/BETWEEN
+        :=               QueryConditionOperators/EQUAL
+        :>               QueryConditionOperators/GREATER_THAN
+        :>=              QueryConditionOperators/GREATER_THAN_OR_EQUAL_TO
+        :in              QueryConditionOperators/IN
+        :<               QueryConditionOperators/LESS_THAN
+        :<=              QueryConditionOperators/LESS_THAN_OR_EQUAL_TO
+        :like            QueryConditionOperators/LIKE
+        :not-between     QueryConditionOperators/NOT_BETWEEN
+        :not=            QueryConditionOperators/NOT_EQUAL
+        :not-in          QueryConditionOperators/NOT_IN
+        :not-like        QueryConditionOperators/NOT_LIKE
+        :num=            QueryConditionOperators/NUMERIC_EQUAL
+        :num>            QueryConditionOperators/NUMERIC_GREATER_THAN
+        :num>=           QueryConditionOperators/NUMERIC_GREATER_THAN_OR_EQUAL_TO
+        :num<            QueryConditionOperators/NUMERIC_LESS_THAN
+        :num<=           QueryConditionOperators/NUMERIC_LESS_THAN_OR_EQUAL_TO
+        :sounds-like     QueryConditionOperators/SOUNDS_LIKE
+        :sounds-not-like QueryConditionOperators/SOUNDS_NOT_LIKE
+        :table           QueryConditionOperators/TABLE} op)
+      (throw (Exception. (str "unknown operator: " op)))))
+
+(defn- build-file-avu-query
+  [name op value]
+  (-> (IRODSGenQueryBuilder. true nil)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_D_DATA_PATH)
+      (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_NAME
+                                    QueryConditionOperators/EQUAL name)
+      (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
+                                    (op->constant op) value)
+      (.exportIRODSQueryFromBuilder 500)))
+
+(defn list-files-with-avu
+  [cm name op value]
+  (let [query    (build-file-avu-query name op value)
+        rs       (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
+    (map #(first (.getColumnsAsList %)) (.getResults rs))))
 
 (defn list-all
   [cm dir-path]

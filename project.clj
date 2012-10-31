@@ -8,6 +8,7 @@
                  [org.irods.jargon.transfer/jargon-transfer-engine "3.2.0"]
                  [org.irods.jargon/jargon-security "3.2.0"]
                  [org.irods.jargon/jargon-ticket "3.2.0"]
+                 [slingshot "0.10.1"]
                  [org.clojure/tools.logging "0.2.3"]]
   :profiles {:dev {:dependencies [[org.iplantc/boxy "0.1.0-SNAPSHOT"]]}}
   :repositories

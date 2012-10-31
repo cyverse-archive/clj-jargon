@@ -1,4 +1,6 @@
 (ns clj-jargon.jargon
+  (:use clojure-commons.error-codes
+        [slingshot.slingshot :only [try+ throw+]])
   (:require [clojure-commons.file-utils :as ft]
             [clojure.tools.logging :as log]
             [clojure.string :as string])
@@ -116,19 +118,19 @@
         file-system ((:proxy-ctor cfg))
         aof         (.getIRODSAccessObjectFactory file-system)]
     (assoc cfg 
-           :irodsAccount        acnt
-           :fileSystem          file-system
-           :accessObjectFactory aof
-           :collectionAO        (.getCollectionAO aof acnt)
-           :dataObjectAO        (.getDataObjectAO aof acnt)
-           :userAO              (.getUserAO aof acnt)
-           :userGroupAO         (.getUserGroupAO aof acnt)
-           :fileFactory         (.getIRODSFileFactory file-system acnt)
-           :fileSystemAO        (.getIRODSFileSystemAO aof acnt)
-           :lister              (.getCollectionAndDataObjectListAndSearchAO aof 
-                                                                            acnt)
-           :quotaAO             (.getQuotaAO aof acnt)
-           :executor            (.getIRODSGenQueryExecutor aof acnt))))
+      :irodsAccount        acnt
+      :fileSystem          file-system
+      :accessObjectFactory aof
+      :collectionAO        (.getCollectionAO aof acnt)
+      :dataObjectAO        (.getDataObjectAO aof acnt)
+      :userAO              (.getUserAO aof acnt)
+      :userGroupAO         (.getUserGroupAO aof acnt)
+      :fileFactory         (.getIRODSFileFactory file-system acnt)
+      :fileSystemAO        (.getIRODSFileSystemAO aof acnt)
+      :lister              (.getCollectionAndDataObjectListAndSearchAO aof 
+                                                                       acnt)
+      :quotaAO             (.getQuotaAO aof acnt)
+      :executor            (.getIRODSGenQueryExecutor aof acnt))))
 
 (defn- log-value
   [msg value]
@@ -165,6 +167,27 @@
         (throw (:exception retval))
         
         :else (:retval retval)))))
+
+(def max-path-length 1067)
+(def max-dir-length 640)
+(def max-filename-length (- max-path-length max-dir-length))
+(def ERR_BAD_DIRNAME_LENGTH "ERR_BAD_DIRNAME_LENGTH")
+(def ERR_BAD_BASENAME_LENGTH "ERR_BAD_BASENAME_LENGTH")
+
+(defn validate-path-lengths
+  [full-path]
+  (let [dir-path (ft/dirname full-path)
+        file-path (ft/basename full-path)]
+    (cond
+     (> (count dir-path) max-dir-length)
+     (throw+ {:error_code ERR_BAD_DIRNAME_LENGTH
+              :dir-path dir-path
+              :full-path full-path})
+
+     (> (count file-path) max-filename-length)
+     (throw+ {:error_code ERR_BAD_BASENAME_LENGTH
+              :file-path file-path
+              :full-path full-path}))))
 
 (defn user-groups
   "Returns a list of group names that the user is in."
@@ -696,10 +719,12 @@
 
 (defn mkdir
   [cm dir-path]
+  (validate-path-lengths dir-path)
   (.mkdir (:fileSystemAO cm) (file cm dir-path) true))
 
 (defn mkdirs
   [cm dir-path]
+  (validate-path-lengths dir-path)
   (.mkdirs (file cm dir-path)))
 
 (defn delete
@@ -719,12 +744,16 @@
   (let [fileSystemAO (:fileSystemAO cm)
         src          (file cm source)
         dst          (file cm dest)]
+    (validate-path-lengths dest)
+    
     (if (is-file? cm source)
       (.renameFile fileSystemAO src dst)
       (.renameDirectory fileSystemAO src dst))))
 
 (defn move-all
   [cm sources dest]
+  (doseq [s sources] (validate-path-lengths (ft/path-join dest (ft/basename s))))
+  
   (mapv 
     #(move cm %1 (ft/path-join dest (ft/basename %1))) 
     sources))

@@ -746,7 +746,8 @@
 (defn- build-file-avu-query
   [name op value]
   (-> (IRODSGenQueryBuilder. true nil)
-      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_D_DATA_PATH)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_COLL_NAME)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_DATA_NAME)
       (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_NAME
                                     QueryConditionOperators/EQUAL name)
       (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
@@ -757,7 +758,7 @@
   [cm name op value]
   (let [query    (build-file-avu-query name op value)
         rs       (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
-    (map #(first (.getColumnsAsList %)) (.getResults rs))))
+    (map #(string/join "/" (.getColumnsAsList %)) (.getResults rs))))
 
 (defn list-all
   [cm dir-path]

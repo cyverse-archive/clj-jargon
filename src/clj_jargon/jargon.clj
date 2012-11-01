@@ -173,12 +173,17 @@
 (def max-filename-length (- max-path-length max-dir-length))
 (def ERR_BAD_DIRNAME_LENGTH "ERR_BAD_DIRNAME_LENGTH")
 (def ERR_BAD_BASENAME_LENGTH "ERR_BAD_BASENAME_LENGTH")
+(def ERR_BAD_PATH_LENGTH "ERR_BAD_PATH_LENGTH")
 
 (defn validate-path-lengths
   [full-path]
   (let [dir-path (ft/dirname full-path)
         file-path (ft/basename full-path)]
     (cond
+     (> (count full-path) max-path-length)
+     (throw+ {:error_code ERR_BAD_PATH_LENGTH
+              :full-path full-path})
+     
      (> (count dir-path) max-dir-length)
      (throw+ {:error_code ERR_BAD_DIRNAME_LENGTH
               :dir-path dir-path
@@ -199,6 +204,7 @@
   "Returns a set of permissions that user has for the dataobject at
    data-path. Takes into account the groups that a user is in."
   [cm user data-path]
+  (validate-path-lengths data-path)
   (let [user-grps    (conj (user-groups cm user) user)
         zone         (:zone cm)
         dataObjectAO (:dataObjectAO cm)]
@@ -212,6 +218,7 @@
   "Returns a set of permissions that a user has for the collection at
    data-path. Takes into account the groups that a user is in. "
   [cm user coll-path]
+  (validate-path-lengths coll-path)
   (let [user-grps    (conj (user-groups cm user) user)
         zone         (:zone cm)
         collectionAO (:collectionAO cm)]
@@ -226,6 +233,7 @@
    the user for the dataobject at data-path, and returns a map with
    the keys :read :write and :own. The values are booleans."
   [cm user data-path]
+  (validate-path-lengths data-path)
   (let [perms  (user-dataobject-perms cm user data-path)
         read   (or (contains? perms read-perm)
                    (contains? perms write-perm)
@@ -242,6 +250,7 @@
    the user for the collection at coll-path and returns a map with
    the keys :read, :write, and :own. The values are booleans."
   [cm user coll-path]
+  (validate-path-lengths coll-path)
   (let [perms  (user-collection-perms cm user coll-path)
         read   (or (contains? perms read-perm)
                    (contains? perms write-perm)
@@ -257,6 +266,7 @@
   "Utility function that checks to see of the user has the specified
    permission for data-path."
   [cm username data-path checked-perm]
+  (validate-path-lengths data-path)
   (let [perms (user-dataobject-perms cm username data-path)]
     (or (contains? perms checked-perm) (contains? perms own-perm))))
 
@@ -264,6 +274,7 @@
   "Checks to see if the user has read permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
+  (validate-path-lengths data-path)
   (or (dataobject-perm? cm user data-path read-perm)
       (dataobject-perm? cm user data-path write-perm)))
   
@@ -271,18 +282,21 @@
   "Checks to see if the user has write permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
+  (validate-path-lengths data-path)
   (dataobject-perm? cm user data-path write-perm))
 
 (defn owns-dataobject?
   "Checks to see if the user has ownership permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
+  (validate-path-lengths data-path)
   (dataobject-perm? cm user data-path own-perm))
 
 (defn collection-perm?
   "Utility function that checks to see if the user has the specified
    permission for the collection path."
   [cm username coll-path checked-perm]
+  (validate-path-lengths coll-path)
   (let [perms (user-collection-perms cm username coll-path)]
     (or (contains? perms checked-perm) (contains? perms own-perm))))
 
@@ -290,6 +304,7 @@
   "Checks to see if the user has read permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
+  (validate-path-lengths coll-path)
   (or (collection-perm? cm user coll-path read-perm)
       (collection-perm? cm user coll-path write-perm)))
 
@@ -297,12 +312,14 @@
   "Checks to see if the suer has write permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
+  (validate-path-lengths coll-path)
   (collection-perm? cm user coll-path write-perm))
 
 (defn owns-collection?
   "Checks to see if the user has ownership permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
+  (validate-path-lengths coll-path)
   (collection-perm? cm user coll-path own-perm))
 
 (defn file
@@ -314,6 +331,7 @@
       path - String containing a path.
 
     Returns: An instance of IRODSFile representing 'path'."
+  (validate-path-lengths path)
   (.instanceIRODSFile (:fileFactory cm) path))
 
 (defn exists?
@@ -324,6 +342,7 @@
       path - String containing a path.
 
     Returns: true if the path exists in iRODS and false otherwise."
+  (validate-path-lengths path)
   (.exists (file cm path)))
 
 (defn paths-exist?
@@ -334,16 +353,19 @@
       paths - A sequence of strings containing paths.
 
     Returns: Boolean"
+  (doseq [p paths] (validate-path-lengths p))
   (zero? (count (filter #(not (exists? cm %)) paths))))
 
 (defn is-file?
   [cm path]
   "Returns true if the path is a file in iRODS, false otherwise."
+  (validate-path-lengths path)
   (.isFile (.instanceIRODSFile (:fileFactory cm) path)))
 
 (defn is-dir?
   [cm path]
   "Returns true if the path is a directory in iRODS, false otherwise."
+  (validate-path-lengths path)
   (let [ff (:fileFactory cm)
         fixed-path (ft/rm-last-slash path)]
     (.isDirectory (.instanceIRODSFile ff fixed-path))))
@@ -360,6 +382,7 @@
    Returns:
      It returns true if the path points to a linked directory, otherwise it
      returns false."
+  (validate-path-lengths path)
   (= ObjStat$SpecColType/LINKED_COLL 
      (.. (:fileFactory cm) 
        (instanceIRODSFile (ft/rm-last-slash path)) 
@@ -376,6 +399,7 @@
 
 (defn list-user-perms
   [cm abs-path]
+  (validate-path-lengths abs-path)
   (if (is-file? cm abs-path)
     (mapv
       user-perms->map
@@ -395,6 +419,7 @@
    Returns:
      It returns a list path names for the entries under the parent."
   [cm parent-path]
+  (validate-path-lengths parent-path)
   (mapv
     #(let [full-path (ft/path-join parent-path %1)]
        (if (is-dir? cm full-path)
@@ -405,17 +430,20 @@
 (defn data-object
   [cm path]
   "Returns an instance of DataObject represeting 'path'."
+  (validate-path-lengths path)
   (.findByAbsolutePath (:dataObjectAO cm) path))
 
 (defn collection
   [cm path]
   "Returns an instance of Collection (the Jargon version) representing
     a directory in iRODS."
+  (validate-path-lengths path)
   (.findByAbsolutePath (:collectionAO cm) (ft/rm-last-slash path)))
 
 (defn lastmod-date
   [cm path]
   "Returns the date that the file/directory was last modified."
+  (validate-path-lengths path)
   (cond
     (is-dir? cm path)  (str (long (.getTime (.getModifiedAt (collection cm path)))))
     (is-file? cm path) (str (long (.getTime (.getUpdatedAt (data-object cm path)))))
@@ -424,6 +452,7 @@
 (defn created-date
   [cm path]
   "Returns the date that the file/directory was created."
+  (validate-path-lengths path)
   (cond
     (is-dir? cm path)  (str (long (.. (collection cm path) getCreatedAt getTime)))
     (is-file? cm path) (str (long (.. (data-object cm path) getUpdatedAt getTime)))
@@ -432,6 +461,7 @@
 (defn- dir-stat
   [cm path]
   "Returns status information for a directory."
+  (validate-path-lengths path)
   (let [coll (collection cm path)]
     {:type     :dir
      :created  (str (long (.. coll getCreatedAt getTime)))
@@ -440,6 +470,7 @@
 (defn- file-stat
   [cm path]
   "Returns status information for a file."
+  (validate-path-lengths path)
   (let [data-obj (data-object cm path)]
     {:type     :file
      :size     (.getDataSize data-obj)
@@ -449,6 +480,7 @@
 (defn stat
   [cm path]
   "Returns status information for a path."
+  (validate-path-lengths path)
   (cond
    (is-dir? cm path)  (dir-stat cm path)
    (is-file? cm path) (file-stat cm path)
@@ -457,6 +489,7 @@
 (defn file-size
   [cm path]
   "Returns the size of the file in bytes."
+  (validate-path-lengths path)
   (.getDataSize (data-object cm path)))
 
 (defn response-map
@@ -480,6 +513,7 @@
       cm - The iRODS context map
       path - The path whose owner is being set.
       owner - The username of the user who will be the owner of 'path'."
+  (validate-path-lengths path)
   (cond
    (is-file? cm path)
    (.setAccessPermissionOwn (:dataObjectAO cm) (:zone cm) path owner)
@@ -494,6 +528,7 @@
     Parameters:
       cm - The iRODS context map
       path - The path being altered."
+  (validate-path-lengths path)
   (if (is-dir? cm path)
     (.setAccessPermissionInherit (:collectionAO cm) (:zone cm) path false)))
 
@@ -505,6 +540,7 @@
       cm - The iRODS context map
       user - String containign a username.
       path - String containing an absolute path for something in iRODS."
+  (validate-path-lengths path)
   (cond
    (not (user-exists? cm user))
    false
@@ -526,6 +562,7 @@
       cm - The iRODS context map
       user - String containing a username.
       path - String containing an path for something in iRODS."
+  (validate-path-lengths path)
   (cond
    (not (user-exists? cm user))
    false
@@ -553,6 +590,7 @@
 
     Returns:
       String containing the name of the last directory in the path."
+  (validate-path-lengths path)
   (.getCollectionLastPathComponent 
     (.findByAbsolutePath (:collectionAO cm) (ft/rm-last-slash path))))
 
@@ -568,6 +606,7 @@
     Returns:
       Sequence containing Collections (the Jargon kind) representing
       directories that reside under the directory represented by 'path'."
+  (validate-path-lengths path)
   (.listCollectionsUnderPath (:lister cm) (ft/rm-last-slash path) 0))
 
 (defn sub-collection-paths
@@ -581,6 +620,7 @@
 
     Returns:
       Sequence containing the paths for directories that live under 'path'."
+  (validate-path-lengths path)
   (map
     #(.getFormattedAbsolutePath %)
     (sub-collections cm path)))
@@ -615,6 +655,7 @@
       cm - The iRODS context map
       user - A string containing the username of the user requesting the check.
       paths - A sequence of strings containing the paths to be checked."
+  (doseq [p paths] (validate-path-lengths p))
   (reduce 
     #(and %1 %2) 
     (map 
@@ -630,7 +671,8 @@
 
 (defn get-metadata
   [cm dir-path]
-  "Returns all of the metadata associated with a path." 
+  "Returns all of the metadata associated with a path."
+  (validate-path-lengths dir-path)
   (mapv
     #(hash-map :attr  (.getAvuAttribute %1)
                :value (.getAvuValue %1)
@@ -642,6 +684,7 @@
 (defn get-attribute
   [cm dir-path attr]
   "Returns a list of avu maps for set of attributes associated with dir-path"
+  (validate-path-lengths dir-path)
   (filter
     #(= (:attr %1) attr)
     (get-metadata cm dir-path)))
@@ -649,11 +692,13 @@
 (defn attribute?
   [cm dir-path attr]
   "Returns true if the path has the associated attribute."
+  (validate-path-lengths dir-path)
   (pos? (count (get-attribute cm dir-path attr))))
 
 (defn set-metadata
   [cm dir-path attr value unit]
   "Sets an avu for dir-path."
+  (validate-path-lengths dir-path)
   (let [avu    (AvuData/instance attr value unit)
         ao-obj (if (is-dir? cm dir-path) 
                  (:collectionAO cm) 
@@ -666,6 +711,7 @@
 (defn delete-metadata
   [cm dir-path attr]
   "Deletes an avu from dir-path."
+  (validate-path-lengths dir-path)
   (let [fattr  (first (get-attribute cm dir-path attr))
         avu    (map2avu fattr)
         ao-obj (if (is-dir? cm dir-path) 
@@ -715,6 +761,7 @@
 
 (defn list-all
   [cm dir-path]
+  (validate-path-lengths dir-path)
   (.listDataObjectsAndCollectionsUnderPath (:lister cm) dir-path))
 
 (defn mkdir
@@ -729,6 +776,7 @@
 
 (defn delete
   [cm a-path]
+  (validate-path-lengths a-path)
   (let [fileSystemAO (:fileSystemAO cm)
         resource     (file cm a-path)]
     (if (:use-trash cm)
@@ -741,10 +789,13 @@
 
 (defn move
   [cm source dest]
+  (validate-path-lengths source)
+  (validate-path-lengths dest)
+  
   (let [fileSystemAO (:fileSystemAO cm)
         src          (file cm source)
         dst          (file cm dest)]
-    (validate-path-lengths dest)
+    #_(validate-path-lengths dest)
     
     (if (is-file? cm source)
       (.renameFile fileSystemAO src dst)
@@ -761,11 +812,13 @@
 (defn output-stream
   "Returns an FileOutputStream for a file in iRODS pointed to by 'output-path'."
   [cm output-path]
+  (validate-path-lengths output-path)
   (.instanceIRODSFileOutputStream (:fileFactory cm) (file cm output-path)))
 
 (defn input-stream
   "Returns a FileInputStream for a file in iRODS pointed to by 'input-path'"
   [cm input-path]
+  (validate-path-lengths input-path)
   (.instanceIRODSFileInputStream (:fileFactory cm) (file cm input-path)))
 
 (defn proxy-input-stream
@@ -786,10 +839,13 @@
 
 (defn read-file
   [cm fpath buffer]
+  (validate-path-lengths fpath)
   (.read (IRODSFileReader. (file cm fpath) (:fileFactory cm)) buffer))
 
 (defn shopping-cart
   [filepaths]
+  (doseq [fp filepaths] (validate-path-lengths fp))
+  
   (let [cart (FileShoppingCart/instance)]
     (loop [fps filepaths]
       (.addAnItem cart (ShoppingCartEntry/instance (first fps)))
@@ -810,6 +866,7 @@
 
 (defn store-cart
   [cm user cart-key filepaths]
+  (doseq [fp filepaths] (validate-path-lengths fp))
   (.serializeShoppingCartAsSpecifiedUser 
     (cart-service cm) 
     (shopping-cart filepaths) 
@@ -818,6 +875,7 @@
 
 (defn permissions
   [cm user fpath]
+  (validate-path-lengths fpath)
   (cond
     (is-dir? cm fpath)
     (collection-perm-map cm user fpath)
@@ -832,6 +890,7 @@
 
 (defn remove-permissions
   [cm user fpath]
+  (validate-path-lengths fpath)
   (cond
    (is-file? cm fpath)
    (.removeAccessPermissionsForUserInAdminMode 
@@ -850,6 +909,8 @@
 
 (defn set-dataobj-perms
   [cm user fpath read? write? own?]
+  (validate-path-lengths fpath)
+  
   (let [dataobj (:dataObjectAO cm)
         zone    (:zone cm)] 
     (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)           
@@ -860,6 +921,7 @@
 
 (defn set-coll-perms
   [cm user fpath read? write? own? recursive?]
+  (validate-path-lengths fpath)
   (let [coll    (:collectionAO cm)
         zone    (:zone cm)]
     (.removeAccessPermissionForUserAsAdmin coll zone fpath user recursive?)
@@ -873,7 +935,8 @@
   ([cm user fpath read? write? own?]
      (set-permissions cm user fpath read? write? own? false))
   ([cm user fpath read? write? own? recursive?]
-    (cond
+     (validate-path-lengths fpath)
+     (cond
       (is-file? cm fpath)
       (set-dataobj-perms cm user fpath read? write? own?)
       
@@ -882,6 +945,7 @@
 
 (defn owns?
   [cm user fpath]
+  (validate-path-lengths fpath)
   (cond
     (is-file? cm fpath)
     (owns-dataobject? cm user fpath)
@@ -894,6 +958,7 @@
 
 (defn remove-access-permissions
   [cm user abs-path]
+  (validate-path-lengths abs-path)
   (cond
    (is-file? cm abs-path)
    (.removeAccessPermissionsForUserInAdminMode 
@@ -918,6 +983,7 @@
 
 (defn fix-owners
   [cm abs-path & owners]
+  (validate-path-lengths abs-path)
   (let [curr-user-perms   (list-user-perms cm abs-path)
         set-of-new-owners (set owners)
         rm-zone           #(if (string/split %1 #"\#")
@@ -955,6 +1021,7 @@
 
 (defn create-ticket
   [cm user fpath ticket-id & {:as ticket-opts}]
+  (validate-path-lengths fpath)
   (let [tas        (ticket-admin-service cm user)
         read-mode  TicketCreateModeEnum/READ
         new-ticket (.createTicket tas read-mode (file cm fpath) ticket-id)]
@@ -1026,7 +1093,10 @@
   (.getDataTransferOperations (:accessObjectFactory cm) (:irodsAccount cm)))
 
 (defn copy
-  [cm source dest] 
+  [cm source dest]
+  (validate-path-lengths source)
+  (validate-path-lengths dest)
+  
   (let [dto (data-transfer-obj cm)
         res (or (:defaultResource cm) "demoResc")]
     (.copy dto source res dest nil nil)))

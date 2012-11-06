@@ -1052,6 +1052,18 @@
     (ticket-admin-service cm user) 
     ticket-id))
 
+(defn ticket-map
+  [cm user ticket-id]
+  (let [ticket (ticket-by-id cm user ticket-id)]
+    {:ticket-id        ticket-id
+     :byte-write-limit (str (.getWriteByteLimit ticket))
+     :byte-write-count (str (.getWriteByteCount ticket))
+     :uses-limit       (str (.getUsesLimit ticket))
+     :uses-count       (str (.getUsesCount ticket))
+     :file-write-limit (str (.getWriteFileLimit ticket))
+     :file-write-count (str (.getWriteFileCount ticket))
+     :expiration       (.getFormattedExpireTime ticket)}))
+
 (defn ticket-expired?
   [ticket-obj]
   (if (.getExpireTime ticket-obj)

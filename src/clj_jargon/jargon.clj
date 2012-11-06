@@ -1062,7 +1062,7 @@
      :uses-count       (str (.getUsesCount ticket))
      :file-write-limit (str (.getWriteFileLimit ticket))
      :file-write-count (str (.getWriteFileCount ticket))
-     :expiration       (.getFormattedExpireTime ticket)}))
+     :expiration       (or (.getExpireTime ticket) "")}))
 
 (defn ticket-expired?
   [ticket-obj]

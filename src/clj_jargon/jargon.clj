@@ -1052,24 +1052,28 @@
     (ticket-admin-service cm user) 
     ticket-id))
 
+
+(defn ticket-obj->map
+  [ticket]
+  {:ticket-id        (.getTicketString ticket)
+   :byte-write-limit (str (.getWriteByteLimit ticket))
+   :byte-write-count (str (.getWriteByteCount ticket))
+   :uses-limit       (str (.getUsesLimit ticket))
+   :uses-count       (str (.getUsesCount ticket))
+   :file-write-limit (str (.getWriteFileLimit ticket))
+   :file-write-count (str (.getWriteFileCount ticket))
+   :expiration       (or (.getExpireTime ticket) "")})
+
+(defn ticket-map
+  [cm user ticket-id]
+  (ticket-obj->map (ticket-by-id cm user ticket-id)))
+
 (defn ticket-ids-for-path
   [cm user path]
   (let [tas (ticket-admin-service cm user)]
     (if (is-dir? cm path)
-      (mapv #(.getTicketString %) (.listAllTicketsForGivenCollection tas path 0))
-      (mapv #(.getTicketString %) (.listAllTicketsForGivenDataObject tas path 0)))))
-
-(defn ticket-map
-  [cm user ticket-id]
-  (let [ticket (ticket-by-id cm user ticket-id)]
-    {:ticket-id        ticket-id
-     :byte-write-limit (str (.getWriteByteLimit ticket))
-     :byte-write-count (str (.getWriteByteCount ticket))
-     :uses-limit       (str (.getUsesLimit ticket))
-     :uses-count       (str (.getUsesCount ticket))
-     :file-write-limit (str (.getWriteFileLimit ticket))
-     :file-write-count (str (.getWriteFileCount ticket))
-     :expiration       (or (.getExpireTime ticket) "")}))
+      (mapv ticket-obj->map (.listAllTicketsForGivenCollection tas path 0))
+      (mapv ticket-obj->map (.listAllTicketsForGivenDataObject tas path 0)))))
 
 (defn ticket-expired?
   [ticket-obj]

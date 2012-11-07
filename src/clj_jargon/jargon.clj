@@ -1052,6 +1052,13 @@
     (ticket-admin-service cm user) 
     ticket-id))
 
+(defn ticket-ids-for-path
+  [cm user path]
+  (let [tas (ticket-admin-service cm user)]
+    (if (is-dir? cm path)
+      (mapv #(.getTicketString %) (.listAllTicketsForGivenCollection tas path 0))
+      (mapv #(.getTicketString %) (.listAllTicketsForGivenDataObject tas path 0)))))
+
 (defn ticket-map
   [cm user ticket-id]
   (let [ticket (ticket-by-id cm user ticket-id)]

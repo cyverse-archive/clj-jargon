@@ -415,16 +415,26 @@
    Parameters:
      cm - The context map
      parent-path - The path of the parrent collection (directory).
+     :ignore-child-exns - When this flag is provided, child names that are too 
+       long will not cause an exception to be thrown.  If they are not ignored, 
+       an exception will be thrown, causing no paths to be listed.  An ignored 
+       child will be replaced with a nil in the returned list.
 
    Returns:
-     It returns a list path names for the entries under the parent."
-  [cm parent-path]
+     It returns a list path names for the entries under the parent.
+
+   Throws:
+     See validate-path-lengths for more information."
+  [cm parent-path & flags]
   (validate-path-lengths parent-path)
   (mapv
-    #(let [full-path (ft/path-join parent-path %1)]
-       (if (is-dir? cm full-path)
-         (ft/add-trailing-slash full-path)
-         full-path))
+    #(try+
+       (let [full-path (ft/path-join parent-path %1)]
+         (if (is-dir? cm full-path)
+           (ft/add-trailing-slash full-path)
+           full-path))
+       (catch Object _
+         (when-not (contains? (set flags) :ignore-child-exns) (throw+))))
     (.getListInDir (:fileSystemAO cm) (file cm parent-path))))
 
 (defn data-object

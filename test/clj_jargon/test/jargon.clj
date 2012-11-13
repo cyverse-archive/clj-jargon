@@ -1,8 +1,9 @@
 (ns clj-jargon.test.jargon
   (:use clojure.test
         clj-jargon.jargon)
-  (:require [boxy.core :as bc]
-            [boxy.jargon-if :as bj])
+  (:require [slingshot.slingshot :as ss]
+            [boxy.core :as boxy]
+            [boxy.jargon-if :as irods])
   (:import [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.core.pub CollectionAO
                                       CollectionAndDataObjectListAndSearchAO
@@ -13,6 +14,10 @@
                                       UserAO
                                       UserGroupAO]
            [org.irods.jargon.core.pub.io IRODSFileFactory]))
+
+
+(def ^{:private true} too-long-dir-name 
+  "/zone/home/user/trash-home-rods-wregglej-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.183209331-12345bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
 
 (def ^{:private true} init-repo
@@ -33,11 +38,14 @@
                            :content ""}
    "/zone/home/user/link" {:type :linked-dir
                            :acl  {}
+                           :avus {}}
+   too-long-dir-name      {:type :normal-dir
+                           :acl  {}
                            :avus {}}})
 
 
 (defrecord ^{:private true} IRODSProxyStub [repo-ref closed-ref?]  
-  bj/IRODSProxy
+  irods/IRODSProxy
   
   (close 
     [_]
@@ -45,11 +53,11 @@
 
   (getIRODSAccessObjectFactory 
     [_] 
-    (bc/mk-mock-ao-factory repo-ref))
+    (boxy/mk-mock-ao-factory repo-ref))
 
   (getIRODSFileFactory 
     [_ acnt]
-    (bc/mk-mock-file-factory repo-ref acnt)))
+    (boxy/mk-mock-file-factory repo-ref acnt)))
                                    
 
 (defn- mk-cm
@@ -162,7 +170,15 @@
   
 (deftest test-list-paths
   (let [cm (mk-cm)]
-    (is (= ["/zone/home/"] (list-paths cm "/zone/") ))))
+    (is (= ["/zone/home/"] (list-paths cm "/zone/")))
+    (is (ss/try+
+          (list-paths cm "/zone/home/user/")
+          false
+          (catch Object _ true)))
+    (is (ss/try+
+          (list-paths cm "/zone/home/user/" :ignore-child-exns)
+          true
+          (catch Object _ false)))))
 
 
 (deftest test-is-file?

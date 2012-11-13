@@ -5,6 +5,7 @@
             [boxy.core :as boxy]
             [boxy.jargon-if :as irods])
   (:import [org.irods.jargon.core.connection IRODSAccount]
+           [org.irods.jargon.core.exception FileNotFoundException]
            [org.irods.jargon.core.pub CollectionAO
                                       CollectionAndDataObjectListAndSearchAO
                                       DataObjectAO
@@ -166,6 +167,13 @@
 
 (deftest test-dataobject-readable?
   (is (true? (dataobject-readable? (mk-cm) "user" "/zone/home/user/file"))))
+  
+
+(deftest test-list-user-perms
+  (is (ss/try+ 
+        (list-user-perms (mk-cm) "/zone/")
+        true
+        (catch FileNotFoundException _ false))))
   
   
 (deftest test-list-paths

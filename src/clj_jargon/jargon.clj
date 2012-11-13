@@ -399,14 +399,15 @@
 
 (defn list-user-perms
   [cm abs-path]
-  (validate-path-lengths abs-path)
-  (if (is-file? cm abs-path)
-    (mapv
-      user-perms->map
-      (.listPermissionsForDataObject (:dataObjectAO cm) abs-path))
-    (mapv
-      user-perms->map
-      (.listPermissionsForCollection (:collectionAO cm) abs-path))))
+  (let [path' (ft/rm-last-slash abs-path)]
+    (validate-path-lengths path')
+    (if (is-file? cm path')
+      (mapv
+        user-perms->map
+        (.listPermissionsForDataObject (:dataObjectAO cm) path'))
+      (mapv
+        user-perms->map
+        (.listPermissionsForCollection (:collectionAO cm) path')))))
 
 (defn list-paths
   "Returns a list of paths for the entries under the parent path.  This is not

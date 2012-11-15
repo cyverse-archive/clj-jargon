@@ -25,13 +25,13 @@
             ShoppingCartEntry 
             ShoppingCartServiceImpl]
            [java.io FileInputStream]
-           #_([org.irods.jargon.ticket 
+           [org.irods.jargon.ticket 
             TicketServiceFactoryImpl 
             TicketAdminServiceImpl
             TicketClientSupport]
            [org.irods.jargon.ticket.packinstr
             TicketInp
-            TicketCreateModeEnum])))
+            TicketCreateModeEnum]))
 
 (def read-perm FilePermissionEnum/READ)
 (def write-perm FilePermissionEnum/WRITE)

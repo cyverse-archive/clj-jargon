@@ -425,7 +425,8 @@
      It returns a list path names for the entries under the parent.
 
    Throws:
-     See validate-path-lengths for more information."
+     FileNotFoundException - This is thrown if parent-path is not in iRODS.
+     See validate-path-lengths for path-related exceptions."
   [cm parent-path & flags]
   (validate-path-lengths parent-path)
   (mapv

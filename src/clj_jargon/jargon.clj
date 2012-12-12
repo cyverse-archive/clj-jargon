@@ -182,6 +182,13 @@
 (def ERR_BAD_BASENAME_LENGTH "ERR_BAD_BASENAME_LENGTH")
 (def ERR_BAD_PATH_LENGTH "ERR_BAD_PATH_LENGTH")
 
+(defn validate-full-dirpath
+  [full-dirpath]
+  (if (> (count full-dirpath) max-dir-length)
+    (throw+ {:error_code ERR_BAD_DIRNAME_LENGTH
+             :dir-path full-dirpath
+             :full-path full-dirpath})))
+
 (defn validate-path-lengths
   [full-path]
   (let [dir-path (ft/dirname full-path)
@@ -194,7 +201,7 @@
      (> (count dir-path) max-dir-length)
      (throw+ {:error_code ERR_BAD_DIRNAME_LENGTH
               :dir-path dir-path
-              :full-path full-path})
+              :full-path full-path}) 
 
      (> (count file-path) max-filename-length)
      (throw+ {:error_code ERR_BAD_BASENAME_LENGTH
@@ -786,11 +793,13 @@
 
 (defn mkdir
   [cm dir-path]
+  (validate-full-dirpath dir-path)
   (validate-path-lengths dir-path)
   (.mkdir (:fileSystemAO cm) (file cm dir-path) true))
 
 (defn mkdirs
   [cm dir-path]
+  (validate-full-dirpath dir-path)
   (validate-path-lengths dir-path)
   (.mkdirs (file cm dir-path)))
 

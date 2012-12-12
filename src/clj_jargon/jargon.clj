@@ -114,7 +114,7 @@
 
 (defn- context-map
   "Throws:
-     org.irods.jargon.core.connection.IRODSConnection - This is thrown when if fails to connect to iRODS"
+     org.irods.jargon.core.exception.JargonException - This is thrown when if fails to connect to iRODS"
   [cfg]
   (let [acnt        (account cfg)
         file-system ((:proxy-ctor cfg))
@@ -141,7 +141,7 @@
 
 (defn- get-context
   "Throws:
-     org.irods.jargon.core.connection.IRODSConnection - This is thrown when if fails to connect to iRODS"
+     org.irods.jargon.core.exception.JargonException - This is thrown when if fails to connect to iRODS"
   [cfg]
   (let [retval {:succeeded true :retval nil :exception nil :retry false}]
     (try
@@ -159,7 +159,7 @@
   "Creates a map containing instances of commonly used Jargon objects.
   
    Throws:
-     org.irods.jargon.core.connection.IRODSConnection - This is thrown when if fails to connect to iRODS"
+     org.irods.jargon.core.exception.JargonException - This is thrown when if fails to connect to iRODS"
   [cfg]
   (loop [num-tries 0]
     (let [retval (get-context cfg)
@@ -1169,7 +1169,7 @@
       It returns the result from evaluating the last expression in the body.*
 
     Throws:
-      org.irods.jargon.core.connection.IRODSConnection - This is thrown when if fails to connect to iRODS
+      org.irods.jargon.core.exception.JargonException - This is thrown when if fails to connect to iRODS
 
     Example:
       (def config (init ...))

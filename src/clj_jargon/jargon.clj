@@ -17,7 +17,10 @@
            [org.irods.jargon.core.query
             IRODSGenQueryBuilder
             QueryConditionOperators
-            RodsGenQueryEnum]
+            RodsGenQueryEnum
+            AVUQueryElement
+            AVUQueryElement$AVUQueryPart
+            AVUQueryOperatorEnum]
            [org.irods.jargon.datautils.datacache 
             DataCacheServiceFactoryImpl]
            [org.irods.jargon.datautils.shoppingcart 
@@ -772,11 +775,57 @@
                                     (op->constant op) value)
       (.exportIRODSQueryFromBuilder 500)))
 
+(defn build-query-for-avu-by-obj
+  [file-path attr op value]
+  (-> (IRODSGenQueryBuilder. true nil)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_META_DATA_ATTR_NAME)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_META_DATA_ATTR_UNITS)
+      #_(.addSelectAsGenQueryValue RodsGenQueryEnum/COL_COLL_NAME)
+      #_(.addSelectAsGenQueryValue RodsGenQueryEnum/COL_DATA_NAME)
+      (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_NAME
+                                    QueryConditionOperators/EQUAL attr)
+      (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
+                                    (op->constant op) value)
+      (.exportIRODSQueryFromBuilder 500)))
+
 (defn list-files-with-avu
   [cm name op value]
   (let [query    (build-file-avu-query name op value)
         rs       (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
     (map #(string/join "/" (.getColumnsAsList %)) (.getResults rs))))
+
+(defn get-avus-by-collection
+  "Returns AVUs associated with a collection that have the given attribute and value."
+  [cm file-path attr units]
+  (let [query [(AVUQueryElement/instanceForValueQuery
+                AVUQueryElement$AVUQueryPart/UNITS
+                AVUQueryOperatorEnum/EQUAL
+                units)
+               (AVUQueryElement/instanceForValueQuery
+                AVUQueryElement$AVUQueryPart/ATTRIBUTE
+                AVUQueryOperatorEnum/EQUAL
+                attr)]]
+    (mapv
+     #(hash-map
+       :attr  (.getAvuAttribute %1)
+       :value (.getAvuValue %1)
+       :unit  (.getAvuUnit %1))
+     (.findMetadataValuesByMetadataQueryForCollection (:collectionAO cm) query file-path))))
+
+(defn list-collections-with-attr-units
+  [cm attr units]
+  (let [query [(AVUQueryElement/instanceForValueQuery
+                AVUQueryElement$AVUQueryPart/UNITS
+                AVUQueryOperatorEnum/EQUAL
+                units)
+               (AVUQueryElement/instanceForValueQuery
+                AVUQueryElement$AVUQueryPart/ATTRIBUTE
+                AVUQueryOperatorEnum/EQUAL
+                attr)]]
+    (mapv
+     #(.getCollectionName %)
+     (.findDomainByMetadataQuery (:collectionAO cm) query))))
 
 (defn list-all
   [cm dir-path]

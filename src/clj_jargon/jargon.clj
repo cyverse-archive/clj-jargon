@@ -904,32 +904,31 @@
         (.directoryDeleteForce fileSystemAO resource)
         (.fileDeleteForce fileSystemAO resource)))))
 
-(defn rods-user?
-  [cm username]
-  (try
-    (= UserTypeEnum/RODS_USER (.getUserType (.findByName (:userAO cm) username)))
-    (catch Exception _ false)))
-
-(defn clear-current-perms
-  [cm path]
+(defn process-perms
+  [f cm path user admin-users]
   (->> (list-user-perms cm path)
-       (filter (comp (partial rods-user? cm) :user))
-       (map #(set-permissions cm (:user %) path false false false true))
+       (remove (comp (conj admin-users user (:username cm)) :user))
+       (map f)
        (dorun)))
 
+(defn reset-perms
+  [cm path user admin-users]
+  (process-perms
+   #(set-permissions cm (:user %) path false false false true)
+   cm path user admin-users))
+
 (defn inherit-perms
-  [cm dst]
+  [cm dst user admin-users]
   (let [parent (ft/dirname dst)]
-    (when (permissions-inherited? cm parent)
-      (clear-current-perms cm dst)
-      (->> (list-user-perms cm parent)
-           (filter (comp (partial rods-user? cm) :user))
-           (map (fn [{user :user {r :read w :write o :own} :permissions}]
-                  (set-permissions cm user dst r w o true)))
-           (dorun)))))
+    (reset-perms cm dst user admin-users)
+    (process-perms
+     (fn [{user :user {r :read w :write o :own} :permissions}]
+       (set-permissions cm user dst r w o true))
+     cm parent user admin-users)))
 
 (defn move
-  [cm source dest]
+  [cm source dest & {:keys [admin-users user]
+                     :or {admin-users #{}}}]
   (validate-path-lengths source)
   (validate-path-lengths dest)
 
@@ -942,16 +941,22 @@
       (.renameFile fileSystemAO src dst)
       (.renameDirectory fileSystemAO src dst))
 
-    (when-not (= (ft/dirname src) (ft/dirname dst))
-      (inherit-perms cm (.getPath dst)))))
+    (let [src-dir  (ft/dirname src)
+          dst-dir  (ft/dirname dst)
+          dst-path (.getPath dst)]
+      (when-not (= src-dir dst-dir)
+        (cond (permissions-inherited? cm dst-dir) (inherit-perms cm dst-path user admin-users)
+              (permissions-inherited? cm src-dir) (reset-perms cm dst-path user admin-users))))))
 
 (defn move-all
-  [cm sources dest]
+  [cm sources dest & {:keys [admin-users user]
+                      :or {admin-users #{}}}]
   (doseq [s sources] (validate-path-lengths (ft/path-join dest (ft/basename s))))
 
-  (mapv
-    #(move cm %1 (ft/path-join dest (ft/basename %1)))
-    sources))
+  (dorun
+   (map
+    #(move cm %1 (ft/path-join dest (ft/basename %1)) :admin-users admin-users)
+    sources)))
 
 (defn output-stream
   "Returns an FileOutputStream for a file in iRODS pointed to by 'output-path'."

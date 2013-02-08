@@ -842,6 +842,160 @@
         rs       (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
     (map #(string/join "/" (.getColumnsAsList %)) (.getResults rs))))
 
+(def ^:private file-avu-query-columns
+  {:name  RodsGenQueryEnum/COL_META_DATA_ATTR_NAME
+   :value RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
+   :unit  RodsGenQueryEnum/COL_META_DATA_ATTR_UNITS})
+
+(def ^:private dir-avu-query-columns
+  {:name  RodsGenQueryEnum/COL_META_COLL_ATTR_NAME
+   :value RodsGenQueryEnum/COL_META_COLL_ATTR_VALUE
+   :unit  RodsGenQueryEnum/COL_META_COLL_ATTR_UNITS})
+
+(defn- add-conditions-from-avu-spec
+  "Adds conditions from an AVU specification to a general query builder. The query specification
+   is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values."
+  [cols builder avu-spec]
+  (->> (remove (comp nil? last) avu-spec)
+       (map (fn [[k v]] [(cols k) v]))
+       (remove (comp nil? first))
+       (map
+        (fn [[col v]]
+          (.addConditionAsGenQueryField builder col QueryConditionOperators/EQUAL v)))
+       (dorun)))
+
+(defn- build-subtree-query-from-avu-spec
+  "Builds a subtree query from a path and an AVU specification.  The AVU specification is a map
+   in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  [select-columns condition-columns path avu-spec]
+  (let [builder (IRODSGenQueryBuilder. true nil)]
+    (dorun (map #(.addSelectAsGenQueryValue builder %) select-columns))
+    (when path
+      (.addConditionAsGenQueryField builder
+                                    RodsGenQueryEnum/COL_COLL_NAME
+                                    QueryConditionOperators/LIKE
+                                    (str path \%)))
+    (add-conditions-from-avu-spec condition-columns builder avu-spec)
+    (.exportIRODSQueryFromBuilder builder 500)))
+
+(defn- list-items-in-tree-with-attr
+  "Lists either files or directories in a subtree given the path to the root of the subtree and an
+   AVU specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search.
+
+   The select-columns parameter indicates which columns should be selected from the query.  The
+   condition-columns parameter is a map indicating which constants to use in the query for the
+   :name, :value, and :unit elements of the AVU specification.  The format-row parameter is a
+   function that can be used to format each row in the result set.  The single parameter to this
+   function is an instance of IRODSQueryResultRow."
+  [select-columns condition-columns format-row cm path avu-spec]
+  (let [query (build-subtree-query-from-avu-spec select-columns condition-columns path avu-spec)]
+    (->> (.executeIRODSQueryAndCloseResult (:executor cm) query 0)
+         (.getResults)
+         (mapv format-row))))
+
+(def list-files-in-tree-with-attr
+  "Lists the paths to files in a subtree given the path to the root of the subtree and an AVU
+   specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  (partial list-items-in-tree-with-attr
+           [RodsGenQueryEnum/COL_COLL_NAME RodsGenQueryEnum/COL_DATA_NAME]
+           file-avu-query-columns
+           #(string/join "/" (.getColumnsAsList %))))
+
+(def list-collections-in-tree-with-attr
+  "Lists the paths to directories in a subtree given the path to the root of the subtree and an
+   AVU specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  (partial list-items-in-tree-with-attr
+           [RodsGenQueryEnum/COL_COLL_NAME]
+           dir-avu-query-columns
+           #(str (first (.getColumnsAsList %)))))
+
+(defn list-everything-in-tree-with-attr
+  [cm path avu-spec]
+  "Lists the paths to both files and directories in a subtree given the path to the root of the
+   subtree and an AVU specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  (doall (mapcat #(% cm path avu-spec)
+                 [list-collections-in-tree-with-attr list-files-in-tree-with-attr])))
+
 (defn get-avus-by-collection
   "Returns AVUs associated with a collection that have the given attribute and value."
   [cm file-path attr units]

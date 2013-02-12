@@ -1109,7 +1109,7 @@
 
   (dorun
    (map
-    #(move cm %1 (ft/path-join dest (ft/basename %1)) :admin-users admin-users)
+    #(move cm %1 (ft/path-join dest (ft/basename %1)) :user user :admin-users admin-users)
     sources)))
 
 (defn output-stream

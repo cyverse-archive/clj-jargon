@@ -3,7 +3,8 @@
         [slingshot.slingshot :only [try+ throw+]])
   (:require [clojure-commons.file-utils :as ft]
             [clojure.tools.logging :as log]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [slingshot.slingshot :as ss])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum UserTypeEnum]
            [org.irods.jargon.core.pub.domain
@@ -35,6 +36,8 @@
            [org.irods.jargon.ticket.packinstr
             TicketInp
             TicketCreateModeEnum]))
+
+(declare permissions)
 
 (def read-perm FilePermissionEnum/READ)
 (def write-perm FilePermissionEnum/WRITE)
@@ -1065,6 +1068,23 @@
        (map f)
        (dorun)))
 
+(defn process-parent-dirs
+  [f process? path]
+  (loop [dir-path (ft/dirname path)]
+    (when (process? dir-path)
+      (log/debug "processing directory:" dir-path)
+      (f dir-path)
+      (recur (ft/dirname dir-path)))))
+
+(defn set-readable
+  [cm username readable? path]
+  (let [{curr-write :write curr-own :own} (permissions cm username path)]
+    (set-permissions cm username path readable? curr-write curr-own)))
+
+(defn contains-accessible-obj?
+  [cm user dpath]
+  (some #(is-readable? cm user %1) (list-paths cm dpath)))
+
 (defn reset-perms
   [cm path user admin-users]
   (process-perms
@@ -1072,13 +1092,64 @@
    cm path user admin-users))
 
 (defn inherit-perms
-  [cm dst user admin-users]
-  (let [parent (ft/dirname dst)]
-    (reset-perms cm dst user admin-users)
+  [cm path user admin-users]
+  (let [parent (ft/dirname path)]
     (process-perms
-     (fn [{user :user {r :read w :write o :own} :permissions}]
-       (set-permissions cm user dst r w o true))
+     (fn [{sharee :user {r :read w :write o :own} :permissions}]
+       (set-permissions cm sharee path r w o true))
      cm parent user admin-users)))
+
+(defn remove-obsolete-perms
+  "Removes permissions that are no longer required for a directory that isn't shared.  Read
+   permissions are no longer required for any user who no longer has access to any file or
+   subdirectory."
+  [cm path user admin-users]
+  (let [parent   (ft/dirname path)
+        base-dir (ft/path-join (:home cm) user)]
+    (process-perms
+     (fn [{sharee :user}]
+       (process-parent-dirs
+        (partial set-readable cm sharee false)
+        #(and (not= % base-dir) (not (contains-accessible-obj? cm sharee %)))
+        path))
+     cm parent user admin-users)))
+
+(defn make-file-accessible
+  "Ensures that a file is accessible to all users that have access to the file."
+  [cm path user admin-users]
+  (let [parent   (ft/dirname path)
+        base-dir (ft/path-join (:home cm) user)]
+    (process-perms
+     (fn [{sharee :user}]
+       (process-parent-dirs (partial set-readable cm sharee true) #(not= % base-dir) path))
+     cm path user admin-users)))
+
+(def ^:private perm-fix-fns
+  "Functions used to update permissions after something is moved, indexed by the inherit flag
+   of the source directory followed by the destination directory."
+  {true  {true  (fn [cm src dst user admin-users]
+                  (reset-perms cm dst user admin-users)
+                  (inherit-perms cm dst user admin-users))
+
+          false (fn [cm src dst user admin-users]
+                  (reset-perms cm dst user admin-users))}
+
+   false {true  (fn [cm src dst user admin-users]
+                  (remove-obsolete-perms cm src user admin-users)
+                  (reset-perms cm dst user admin-users)
+                  (inherit-perms cm dst user admin-users))
+
+          false (fn [cm src dst user admin-users]
+                  (remove-obsolete-perms cm src user admin-users)
+                  (make-file-accessible cm dst user admin-users))}})
+
+(defn fix-perms
+  [cm src dst user admin-users]
+  (let [src-dir (ft/dirname src)
+        dst-dir (ft/dirname dst)]
+    (when-not (= src-dir dst-dir)
+      ((get-in perm-fix-fns (mapv #(permissions-inherited? cm %) [src-dir dst-dir]))
+       cm (.getPath src) (.getPath dst) user admin-users))))
 
 (defn move
   [cm source dest & {:keys [admin-users user]
@@ -1095,12 +1166,7 @@
       (.renameFile fileSystemAO src dst)
       (.renameDirectory fileSystemAO src dst))
 
-    (let [src-dir  (ft/dirname src)
-          dst-dir  (ft/dirname dst)
-          dst-path (.getPath dst)]
-      (when-not (= src-dir dst-dir)
-        (cond (permissions-inherited? cm dst-dir) (inherit-perms cm dst-path user admin-users)
-              (permissions-inherited? cm src-dir) (reset-perms cm dst-path user admin-users))))))
+    (fix-perms cm src dst user admin-users)))
 
 (defn move-all
   [cm sources dest & {:keys [admin-users user]
@@ -1391,8 +1457,8 @@
     (.copy dto source res dest nil nil)))
 
 (defmacro with-jargon
-  "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value. 
-   Next it evaluates the body expressions. Finally, it closes the iRODS connection*. The body 
+  "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value.
+   Next it evaluates the body expressions. Finally, it closes the iRODS connection*. The body
    expressions should use the value of cm-sym to access the iRODS context.
 
    Parameters:
@@ -1410,8 +1476,8 @@
        [ctx]
        (list-all ctx \"/zone/home/user/\"))
 
-   * If an IRODSFileInputStream is the result of the last body expression, the iRODS connection is 
-     not closed. Instead, a special InputStream is returned than when closed, closes the iRODS 
+   * If an IRODSFileInputStream is the result of the last body expression, the iRODS connection is
+     not closed. Instead, a special InputStream is returned than when closed, closes the iRODS
      connection is well."
   [cfg [cm-sym] & body]
   `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
@@ -1425,7 +1491,7 @@
              (do (log/debug curr-with-jargon-index "- cleaning up and returning a plain value")
                  (clean-return ~cm-sym retval#))))
          (catch Object o1#
-           (ss/try+ 
+           (ss/try+
              (.close (:fileSystem ~cm-sym))
              (catch Object o2#))
            (ss/throw+))))))

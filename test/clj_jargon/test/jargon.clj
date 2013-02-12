@@ -133,37 +133,44 @@
 
 
 (deftest test-with-jargon
-  (let [closed?   (atom false)
-        test-ctor #(->IRODSProxyStub (atom init-repo) closed?)
-        cfg       {:host            "host" 
-                   :port            "0" 
-                   :username        "user" 
-                   :password        "passwd" 
-                   :home            "/zone/home/user" 
-                   :zone            "zone" 
-                   :defaultResource "resource"
-                   :max-retries     0
-                   :retry-sleep     0
-                   :use-trash       false
-                   :proxy-ctor      test-ctor}]
-    (with-jargon cfg [cm]
-      (doall (map 
-               #(is (= (% cfg) (% cm))) 
-               (keys cfg)))
-      (is (instance? IRODSAccount (:irodsAccount cm)))
-      (is (instance? IRODSProxyStub (:fileSystem cm)))
-      (is (instance? IRODSAccessObjectFactory (:accessObjectFactory cm)))
-      (is (instance? CollectionAO (:collectionAO cm)))
-      (is (instance? DataObjectAO (:dataObjectAO cm)))
-      (is (instance? UserAO (:userAO cm)))
-      (is (instance? UserGroupAO (:userGroupAO cm)))
-      (is (instance? IRODSFileFactory (:fileFactory cm)))
-      (is (instance? IRODSFileSystemAO (:fileSystemAO cm)))
-      (is (instance? CollectionAndDataObjectListAndSearchAO (:lister cm)))
-      (is (instance? QuotaAO (:quotaAO cm)))
-      (is (not @closed?)))
-    (is @closed?)))
-
+  (letfn [(->cfg [closed?-ref] {:host            "host" 
+                                :port            "0" 
+                                :username        "user" 
+                                :password        "passwd" 
+                                :home            "/zone/home/user" 
+                                :zone            "zone" 
+                                :defaultResource "resource"
+                                :max-retries     0
+                                :retry-sleep     0
+                                :use-trash       false
+                                :proxy-ctor      #(->IRODSProxyStub (atom init-repo) closed?-ref)})]
+    (testing "normal operation"
+      (let [closed? (atom false)
+            cfg     (->cfg closed?)]
+        (with-jargon cfg [cm]
+          (doall (map #(is (= (% cfg) (% cm))) 
+                      (keys cfg)))
+          (is (instance? IRODSAccount (:irodsAccount cm)))
+          (is (instance? IRODSProxyStub (:fileSystem cm)))
+          (is (instance? IRODSAccessObjectFactory (:accessObjectFactory cm)))
+          (is (instance? CollectionAO (:collectionAO cm)))
+          (is (instance? DataObjectAO (:dataObjectAO cm)))
+          (is (instance? UserAO (:userAO cm)))
+          (is (instance? UserGroupAO (:userGroupAO cm)))
+          (is (instance? IRODSFileFactory (:fileFactory cm)))
+          (is (instance? IRODSFileSystemAO (:fileSystemAO cm)))
+          (is (instance? CollectionAndDataObjectListAndSearchAO (:lister cm)))
+          (is (instance? QuotaAO (:quotaAO cm)))
+          (is (not @closed?)))
+        (is @closed?)))
+    (testing "closes when exception thrown"
+      (let [closed? (atom false)]
+        (ss/try+
+          (with-jargon (->cfg closed?) [_]
+            (ss/throw+ "an exception"))
+          (is false)
+          (catch Object _ (is @closed?)))))))
+          
 
 (deftest test-dataobject-readable?
   (is (true? (dataobject-readable? (mk-cm) "user" "/zone/home/user/file"))))

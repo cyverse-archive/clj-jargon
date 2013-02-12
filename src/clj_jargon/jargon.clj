@@ -1391,40 +1391,41 @@
     (.copy dto source res dest nil nil)))
 
 (defmacro with-jargon
-  "An iRODS connection is opened, binding the connection's context to the
-    symbolic cm-sym value.  Next it evaluates the body expressions.  Finally, it
-    closes the iRODS connection*.  The body expressions should use the value of
-    cm-sym to access the iRODS context.
+  "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value. 
+   Next it evaluates the body expressions. Finally, it closes the iRODS connection*. The body 
+   expressions should use the value of cm-sym to access the iRODS context.
 
-    Parameters:
-      cfg - The Jargon configuration used to connect to iRODS.
-      [cm-sym] - Holds the name of the binding to the iRODS context map used by
-        the body expressions.
-      body - Zero or more expressions to be evaluated while an iRODS connection
-        is open.
+   Parameters:
+     cfg - The Jargon configuration used to connect to iRODS.
+     [cm-sym] - Holds the name of the binding to the iRODS context map used by the body expressions.
+     body - Zero or more expressions to be evaluated while an iRODS connection is open.
 
-    Returns:
-      It returns the result from evaluating the last expression in the body.*
+   Returns:
+     It returns the result from evaluating the last expression in the body.*
 
-    Example:
-      (def config (init ...))
+   Example:
+     (def config (init ...))
 
-      (with-jargon config
-        [ctx]
-        (list-all ctx \"/zone/home/user/\"))
+     (with-jargon config
+       [ctx]
+       (list-all ctx \"/zone/home/user/\"))
 
-    * If an IRODSFileInputStream is the result of the last body expression, the
-      iRODS connection is not closed.  Instead, an special InputStream is
-      returned than when closed, closes the iRODS connection is well."
+   * If an IRODSFileInputStream is the result of the last body expression, the iRODS connection is 
+     not closed. Instead, a special InputStream is returned than when closed, closes the iRODS 
+     connection is well."
   [cfg [cm-sym] & body]
   `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
      (log/debug "curr-with-jargon-index:" curr-with-jargon-index)
-     (let [~cm-sym (create-jargon-context-map ~cfg)
-           retval# (do ~@body)]
-       (if (instance? IRODSFileInputStream retval#)
-         (do (log/debug curr-with-jargon-index
-                        "- returning a proxy input stream...")
-             (proxy-input-stream ~cm-sym retval#)) ;The proxied InputStream handles clean up.
-         (do (log/debug curr-with-jargon-index
-                        "- cleaning up and returning a plain value")
-             (clean-return ~cm-sym retval#))))))
+     (when-let [~cm-sym (create-jargon-context-map ~cfg)]
+       (ss/try+
+         (let [retval# (do ~@body)]
+           (if (instance? IRODSFileInputStream retval#)
+             (do (log/debug curr-with-jargon-index "- returning a proxy input stream...")
+                 (proxy-input-stream ~cm-sym retval#)) ;The proxied InputStream handles clean up.
+             (do (log/debug curr-with-jargon-index "- cleaning up and returning a plain value")
+                 (clean-return ~cm-sym retval#))))
+         (catch Object o1#
+           (ss/try+ 
+             (.close (:fileSystem ~cm-sym))
+             (catch Object o2#))
+           (ss/throw+))))))

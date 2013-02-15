@@ -227,16 +227,11 @@
 (defn rs-seq
   [{:keys [cm rs] :as crs}]
   (println "DEBUG top of rs-seq")
-  (if (.isHasMoreRecords @rs)
-    (let [_       (println "a continuation is available")
-          records (.getResults @rs)
-          _       (println "got the first set of records")
-          new-rs  (.getMoreResults (:executor cm) @rs)
-          _       (println "got the continuation")]
-      (reset! rs new-rs)
-      (println "updated the closeable result set with the continuation")
-      (lazy-cat records (rs-seq crs)))
-    (.getResults @rs)))
+  (.getResults @rs))
+
+(defn result-row->vec
+  [rr]
+  (vec (.getColumnsAsList rr)))
 
 (defn collection-perms-query
   [cm coll-path page-size]
@@ -244,10 +239,11 @@
    (:executor cm)
    (IRODSGenQuery/instance
     (String/format
-     "select %1s, %2s where %3s = '%4s'"
+     "select %1s, %2s, %3s where %3s = '%4s'"
      (into-array
       [(.getName RodsGenQueryEnum/COL_COLL_ACCESS_TYPE)
        (.getName RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME)
+       (.getName RodsGenQueryEnum/COL_COLL_NAME)
        (.getName RodsGenQueryEnum/COL_COLL_NAME)
        coll-path]))
     page-size)
@@ -259,8 +255,14 @@
 
 (defn test-it
   [cm coll-path page-size]
-  (with-open [crs (collection-perms-rs cm coll-path page-size)]
-    (clojure.pprint/pprint (vec (rs-seq crs)))))
+  (let [crs (collection-perms-rs cm coll-path page-size)
+        seq-of-rsobjs  (rs-seq crs)
+        seq-of-results (mapv result-row->vec seq-of-rsobjs)]
+    (clojure.pprint/pprint seq-of-results)
+
+    (if-not (.isLastResult (first seq-of-rsobjs))
+      (.getMoreResults (:executor cm) @(:rs crs)))
+    #_(clojure.pprint/pprint (vec (rs-seq crs)))))
 
 #_(defn new-user-collection-perms
   [cm user coll-path]

@@ -16,7 +16,9 @@
             IRODSFileReader
             IRODSFileInputStream]
            [org.irods.jargon.core.query
+            IRODSGenQuery
             IRODSGenQueryBuilder
+            IRODSQueryResultSet
             QueryConditionOperators
             RodsGenQueryEnum
             AVUQueryElement
@@ -28,7 +30,7 @@
             FileShoppingCart
             ShoppingCartEntry
             ShoppingCartServiceImpl]
-           [java.io FileInputStream]
+           [java.io Closeable FileInputStream]
            [org.irods.jargon.ticket
             TicketServiceFactoryImpl
             TicketAdminServiceImpl
@@ -213,6 +215,65 @@
   (for [ug (.findUserGroupsForUser (:userGroupAO cm) user)]
     (.getUserGroupName ug)))
 
+(defrecord CloseableResultSet [cm rs]
+  Closeable
+  (close [this]
+    (.closeResults (:executor cm) @rs)))
+
+(defn- closeable-rs
+  [cm rs]
+  (CloseableResultSet. cm (atom rs)))
+
+(defn rs-seq
+  [{:keys [cm rs] :as crs}]
+  (println "DEBUG top of rs-seq")
+  (if (.isHasMoreRecords @rs)
+    (let [_       (println "a continuation is available")
+          records (.getResults @rs)
+          _       (println "got the first set of records")
+          new-rs  (.getMoreResults (:executor cm) @rs)
+          _       (println "got the continuation")]
+      (reset! rs new-rs)
+      (println "updated the closeable result set with the continuation")
+      (lazy-cat records (rs-seq crs)))
+    (.getResults @rs)))
+
+(defn collection-perms-query
+  [cm coll-path page-size]
+  (.executeIRODSQueryWithPaging
+   (:executor cm)
+   (IRODSGenQuery/instance
+    (String/format
+     "select %1s, %2s where %3s = '%4s'"
+     (into-array
+      [(.getName RodsGenQueryEnum/COL_COLL_ACCESS_TYPE)
+       (.getName RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME)
+       (.getName RodsGenQueryEnum/COL_COLL_NAME)
+       coll-path]))
+    page-size)
+   0))
+
+(defn collection-perms-rs
+  [cm coll-path page-size]
+  (closeable-rs cm (collection-perms-query cm coll-path page-size)))
+
+(defn test-it
+  [cm coll-path page-size]
+  (with-open [crs (collection-perms-rs cm coll-path page-size)]
+    (clojure.pprint/pprint (vec (rs-seq crs)))))
+
+#_(defn new-user-collection-perms
+  [cm user coll-path]
+  (validate-path-lengths coll-path)
+  (let [user-grps (conj (set (user-groups cm user)) user)
+        query     (collection-perms-query coll-path)
+        rs        (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
+    (->> (.getResults rs)
+         (map #(.getColumnsAsList %))
+         (filter (comp user-grps last))
+         (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
+         (set))))
+
 (defn user-dataobject-perms
   "Returns a set of permissions that user has for the dataobject at
    data-path. Takes into account the groups that a user is in."
@@ -236,10 +297,10 @@
         zone         (:zone cm)
         collectionAO (:collectionAO cm)]
     (set
-      (filterv
-        #(not= %1 none-perm)
-        (for [username user-grps]
-          (.getPermissionForCollection collectionAO coll-path username zone))))))
+     (filterv
+      #(not= %1 none-perm)
+      (for [username user-grps]
+        (.getPermissionForCollection collectionAO coll-path username zone))))))
 
 (defn dataobject-perm-map
   "Uses (user-dataobject-perms) to grab the 'raw' permissions for

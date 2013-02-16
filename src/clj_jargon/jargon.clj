@@ -215,94 +215,93 @@
   (for [ug (.findUserGroupsForUser (:userGroupAO cm) user)]
     (.getUserGroupName ug)))
 
-(defrecord CloseableResultSet [cm rs]
-  Closeable
-  (close [this]
-    (.closeResults (:executor cm) @rs)))
-
-(defn- closeable-rs
-  [cm rs]
-  (CloseableResultSet. cm (atom rs)))
-
-(defn rs-seq
-  [{:keys [cm rs] :as crs}]
-  (println "DEBUG top of rs-seq")
-  (.getResults @rs))
-
 (defn result-row->vec
   [rr]
   (vec (.getColumnsAsList rr)))
 
-(defn collection-perms-query
-  [cm coll-path page-size]
-  (.executeIRODSQueryWithPaging
+(defmacro print-it
+  [form]
+  `(let [res# ~form]
+     (println (str (quote ~form)) "=" res#)
+     res#))
+
+(defmacro print-result
+  [form]
+  `(let [res# ~form]
+     (println res#)
+     res#))
+
+(defn username->id
+  [cm user]
+  (->> (.executeIRODSQueryAndCloseResult
+        (:executor cm)
+        (IRODSGenQuery/instance
+         (String/format
+          "select %s where %s = '%s'"
+          (into-array
+           [(.getName RodsGenQueryEnum/COL_USER_ID)
+            (.getName RodsGenQueryEnum/COL_USER_NAME)
+            user]))
+         500)
+        0)
+       (.getResults)
+       (mapv result-row->vec)
+       (ffirst)))
+
+(defn- collection-perms-rs
+  [cm user coll-path]
+  (.executeIRODSQueryAndCloseResult
    (:executor cm)
    (IRODSGenQuery/instance
     (String/format
-     "select %1s, %2s, %3s where %3s = '%4s'"
+     "select %s where %s = '%s' and %s = '%s'"
      (into-array
       [(.getName RodsGenQueryEnum/COL_COLL_ACCESS_TYPE)
+       (.getName RodsGenQueryEnum/COL_COLL_NAME)
+       coll-path
        (.getName RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME)
-       (.getName RodsGenQueryEnum/COL_COLL_NAME)
-       (.getName RodsGenQueryEnum/COL_COLL_NAME)
-       coll-path]))
-    page-size)
+       user]))
+    500)
    0))
 
-(defn collection-perms-rs
-  [cm coll-path page-size]
-  (closeable-rs cm (collection-perms-query cm coll-path page-size)))
-
-(defn test-it
-  [cm coll-path page-size]
-  (let [crs (collection-perms-rs cm coll-path page-size)
-        seq-of-rsobjs  (rs-seq crs)
-        seq-of-results (mapv result-row->vec seq-of-rsobjs)]
-    (clojure.pprint/pprint seq-of-results)
-
-    (if-not (.isLastResult (first seq-of-rsobjs))
-      (.getMoreResults (:executor cm) @(:rs crs)))
-    #_(clojure.pprint/pprint (vec (rs-seq crs)))))
-
-#_(defn new-user-collection-perms
+(defn user-collection-perms
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (let [user-grps (conj (set (user-groups cm user)) user)
-        query     (collection-perms-query coll-path)
-        rs        (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
-    (->> (.getResults rs)
-         (map #(.getColumnsAsList %))
-         (filter (comp user-grps last))
-         (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
-         (set))))
+  (->> (conj (set (user-groups cm user)) user)
+       (map #(collection-perms-rs cm % coll-path))
+       (mapcat #(.getResults %))
+       (map #(.getColumnsAsList %))
+       (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
+       (set)))
+
+(defn- dataobject-perms-rs
+  [cm user-id data-path]
+  (.executeIRODSQueryAndCloseResult
+   (:executor cm)
+   (IRODSGenQuery/instance
+    (String/format
+     "select %s where %s = '%s' and %s = '%s' and %s = '%s'"
+     (into-array
+      [(.getName RodsGenQueryEnum/COL_DATA_ACCESS_TYPE)
+       (.getName RodsGenQueryEnum/COL_COLL_NAME)
+       (ft/dirname data-path)
+       (.getName RodsGenQueryEnum/COL_DATA_NAME)
+       (ft/basename data-path)
+       (.getName RodsGenQueryEnum/COL_DATA_ACCESS_USER_ID)
+       user-id]))
+    500)
+   0))
 
 (defn user-dataobject-perms
-  "Returns a set of permissions that user has for the dataobject at
-   data-path. Takes into account the groups that a user is in."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (let [user-grps    (conj (user-groups cm user) user)
-        zone         (:zone cm)
-        dataObjectAO (:dataObjectAO cm)]
-    (set
-      (filterv
-        #(not= %1 none-perm)
-        (for [username user-grps]
-          (.getPermissionForDataObject dataObjectAO data-path username zone))))))
-
-(defn user-collection-perms
-  "Returns a set of permissions that a user has for the collection at
-   data-path. Takes into account the groups that a user is in. "
-  [cm user coll-path]
-  (validate-path-lengths coll-path)
-  (let [user-grps    (conj (user-groups cm user) user)
-        zone         (:zone cm)
-        collectionAO (:collectionAO cm)]
-    (set
-     (filterv
-      #(not= %1 none-perm)
-      (for [username user-grps]
-        (.getPermissionForCollection collectionAO coll-path username zone))))))
+  (->> (conj (set (user-groups cm user)) user)
+       (map (partial username->id cm))
+       (map #(dataobject-perms-rs cm % data-path))
+       (mapcat #(.getResults %))
+       (map #(.getColumnsAsList %))
+       (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
+       (set)))
 
 (defn dataobject-perm-map
   "Uses (user-dataobject-perms) to grab the 'raw' permissions for

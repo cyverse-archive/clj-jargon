@@ -246,12 +246,13 @@
 
 (defn execute-gen-query
   [cm sql cols]
-  (.executeIRODSQueryAndCloseResult
-   (:executor cm)
-   (IRODSGenQuery/instance
-    (String/format sql (gen-query-col-names cols))
-    500)
-   0))
+  (.getResults
+   (.executeIRODSQueryAndCloseResult
+    (:executor cm)
+    (IRODSGenQuery/instance
+     (String/format sql (gen-query-col-names cols))
+     500)
+    0)))
 
 (defn username->id
   [cm user]
@@ -260,7 +261,6 @@
         [RodsGenQueryEnum/COL_USER_ID
          RodsGenQueryEnum/COL_USER_NAME
          user])
-       (.getResults)
        (mapv result-row->vec)
        (first)
        (first)))
@@ -280,7 +280,7 @@
   (validate-path-lengths coll-path)
   (->> (conj (set (user-groups cm user)) user)
        (map #(collection-perms-rs cm % coll-path))
-       (mapcat #(.getResults %))
+       (apply concat)
        (map #(.getColumnsAsList %))
        (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
        (set)))
@@ -303,10 +303,120 @@
   (->> (conj (set (user-groups cm user)) user)
        (map (partial username->id cm))
        (map #(dataobject-perms-rs cm % data-path))
-       (mapcat #(.getResults %))
+       (apply concat)
        (map #(.getColumnsAsList %))
        (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
        (set)))
+
+(defn perm-map-for
+  [perms-code]
+  (let [perms (FilePermissionEnum/valueOf (Integer/parseInt perms-code))]
+    {:read  (contains? #{read-perm write-perm own-perm} perms)
+     :write (contains? #{write-perm own-perm} perms)
+     :own   (contains? #{own-perm} perms)}))
+
+(defn list-subdirs-rs
+  [cm user coll-path]
+  (execute-gen-query cm
+   "select %s, %s, %s, %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_COLL_NAME
+    RodsGenQueryEnum/COL_COLL_CREATE_TIME
+    RodsGenQueryEnum/COL_COLL_MODIFY_TIME
+    RodsGenQueryEnum/COL_COLL_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_PARENT_NAME
+    coll-path
+    RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
+    user]))
+
+(def perm-order-map
+  (into {} (map vector [read-perm write-perm own-perm] (range))))
+
+(defn str->perm-const
+  [s]
+  (FilePermissionEnum/valueOf (Integer/parseInt s)))
+
+(defn format-listing
+  [format-fn perm-pos listing]
+  (letfn [(select-listing [[_ v]]
+            [(apply max-key #(perm-order-map (str->perm-const (nth % perm-pos))) v)])]
+    (->> (apply concat listing)
+         (map result-row->vec)
+         (group-by first)
+         (mapcat select-listing)
+         (map format-fn))))
+
+(defn format-dir
+  [[path create-time mod-time perms]]
+  {:date-created  (str (* (Integer/parseInt create-time) 1000))
+   :date-modified (str (* (Integer/parseInt mod-time) 1000))
+   :file-size     0
+   :hasSubDirs    true
+   :id            path
+   :label         (ft/basename path)
+   :permissions   (perm-map-for perms)})
+
+(defn list-subdirs
+  [cm user coll-path]
+  (format-listing
+   format-dir 3
+   (map #(list-subdirs-rs cm % coll-path)
+        (conj (user-groups cm user) user))))
+
+(defn list-files-in-dir-rs
+  [cm user-id coll-path]
+  (execute-gen-query cm
+   "select %s, %s, %s, %s, %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_DATA_NAME
+    RodsGenQueryEnum/COL_D_CREATE_TIME
+    RodsGenQueryEnum/COL_D_MODIFY_TIME
+    RodsGenQueryEnum/COL_DATA_SIZE
+    RodsGenQueryEnum/COL_DATA_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    coll-path
+    RodsGenQueryEnum/COL_DATA_ACCESS_USER_ID
+    user-id]))
+
+(defn format-file
+  [coll-path [name create-time mod-time size perms]]
+  {:date-created  (str (* (Integer/parseInt create-time) 1000))
+   :date-modified (str (* (Integer/parseInt mod-time) 1000))
+   :file-size     size
+   :permissions   (perm-map-for perms)
+   :id            (ft/path-join coll-path name)
+   :label         name})
+
+(defn list-files-in-dir
+  [cm user coll-path]
+  (format-listing
+   (partial format-file coll-path) 4
+   (map #(list-files-in-dir-rs cm (username->id cm %) coll-path)
+        (conj (user-groups cm user) user))))
+
+(defn list-dir-rs
+  [cm user coll-path]
+  (execute-gen-query cm
+   "select %s, %s, %s, %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_COLL_NAME
+    RodsGenQueryEnum/COL_COLL_CREATE_TIME
+    RodsGenQueryEnum/COL_COLL_MODIFY_TIME
+    RodsGenQueryEnum/COL_COLL_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    coll-path
+    RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
+    user]))
+
+(defn list-dir
+  [cm user coll-path & {:keys [include-files include-subdirs]
+                        :or   {include-files   false
+                               include-subdirs true}}]
+  (let [coll-path (ft/rm-last-slash coll-path)
+        listing   (first (map (comp format-dir result-row->vec) (list-dir-rs cm user coll-path)))]
+    (when-not (nil? listing)
+      (reduce (fn [listing [_ k f]] (assoc listing k (f cm user coll-path)))
+              listing
+              (filter first
+                      [[include-subdirs :folders list-subdirs]
+                       [include-files :files list-files-in-dir]])))))
 
 (defn dataobject-perm-map
   "Uses (user-dataobject-perms) to grab the 'raw' permissions for

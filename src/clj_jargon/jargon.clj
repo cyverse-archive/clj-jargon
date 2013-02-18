@@ -231,38 +231,49 @@
      (println res#)
      res#))
 
-(defn username->id
-  [cm user]
-  (->> (.executeIRODSQueryAndCloseResult
-        (:executor cm)
-        (IRODSGenQuery/instance
-         (String/format
-          "select %s where %s = '%s'"
-          (into-array
-           [(.getName RodsGenQueryEnum/COL_USER_ID)
-            (.getName RodsGenQueryEnum/COL_USER_NAME)
-            user]))
-         500)
-        0)
-       (.getResults)
-       (mapv result-row->vec)
-       (ffirst)))
+(defn column-xformer
+  [col]
+  (cond
+   (= (type col) RodsGenQueryEnum)
+   (.getName col)
 
-(defn- collection-perms-rs
-  [cm user coll-path]
+   :else
+   col))
+
+(defn gen-query-col-names
+  [cols]
+  (into-array (mapv column-xformer cols)))
+
+(defn execute-gen-query
+  [cm sql cols]
   (.executeIRODSQueryAndCloseResult
    (:executor cm)
    (IRODSGenQuery/instance
-    (String/format
-     "select %s where %s = '%s' and %s = '%s'"
-     (into-array
-      [(.getName RodsGenQueryEnum/COL_COLL_ACCESS_TYPE)
-       (.getName RodsGenQueryEnum/COL_COLL_NAME)
-       coll-path
-       (.getName RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME)
-       user]))
+    (String/format sql (gen-query-col-names cols))
     500)
    0))
+
+(defn username->id
+  [cm user]
+  (->> (execute-gen-query cm
+        "select %s where %s = '%s'"
+        [RodsGenQueryEnum/COL_USER_ID
+         RodsGenQueryEnum/COL_USER_NAME
+         user])
+       (.getResults)
+       (mapv result-row->vec)
+       (first)
+       (first)))
+
+(defn- collection-perms-rs
+  [cm user coll-path]
+  (execute-gen-query cm
+   "select %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_COLL_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    coll-path
+    RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
+    user]))
 
 (defn user-collection-perms
   [cm user coll-path]
@@ -276,21 +287,15 @@
 
 (defn- dataobject-perms-rs
   [cm user-id data-path]
-  (.executeIRODSQueryAndCloseResult
-   (:executor cm)
-   (IRODSGenQuery/instance
-    (String/format
-     "select %s where %s = '%s' and %s = '%s' and %s = '%s'"
-     (into-array
-      [(.getName RodsGenQueryEnum/COL_DATA_ACCESS_TYPE)
-       (.getName RodsGenQueryEnum/COL_COLL_NAME)
-       (ft/dirname data-path)
-       (.getName RodsGenQueryEnum/COL_DATA_NAME)
-       (ft/basename data-path)
-       (.getName RodsGenQueryEnum/COL_DATA_ACCESS_USER_ID)
-       user-id]))
-    500)
-   0))
+  (execute-gen-query cm
+   "select %s where %s = '%s' and %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_DATA_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    (ft/dirname data-path)
+    RodsGenQueryEnum/COL_DATA_NAME
+    (ft/basename data-path)
+    RodsGenQueryEnum/COL_DATA_ACCESS_USER_ID
+    user-id]))
 
 (defn user-dataobject-perms
   [cm user data-path]

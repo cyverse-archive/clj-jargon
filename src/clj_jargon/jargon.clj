@@ -3,38 +3,43 @@
         [slingshot.slingshot :only [try+ throw+]])
   (:require [clojure-commons.file-utils :as ft]
             [clojure.tools.logging :as log]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [slingshot.slingshot :as ss])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
-           [org.irods.jargon.core.protovalues FilePermissionEnum]
-           [org.irods.jargon.core.pub.domain 
+           [org.irods.jargon.core.protovalues FilePermissionEnum UserTypeEnum]
+           [org.irods.jargon.core.pub.domain
             AvuData
             ObjStat$SpecColType]
            [org.irods.jargon.core.connection IRODSAccount]
            [org.irods.jargon.core.pub IRODSFileSystem]
-           [org.irods.jargon.core.pub.io 
-            IRODSFileReader 
+           [org.irods.jargon.core.pub.io
+            IRODSFileReader
             IRODSFileInputStream]
            [org.irods.jargon.core.query
+            IRODSGenQuery
             IRODSGenQueryBuilder
+            IRODSQueryResultSet
             QueryConditionOperators
             RodsGenQueryEnum
             AVUQueryElement
             AVUQueryElement$AVUQueryPart
             AVUQueryOperatorEnum]
-           [org.irods.jargon.datautils.datacache 
+           [org.irods.jargon.datautils.datacache
             DataCacheServiceFactoryImpl]
-           [org.irods.jargon.datautils.shoppingcart 
+           [org.irods.jargon.datautils.shoppingcart
             FileShoppingCart
-            ShoppingCartEntry 
+            ShoppingCartEntry
             ShoppingCartServiceImpl]
-           [java.io FileInputStream]
-           [org.irods.jargon.ticket 
-            TicketServiceFactoryImpl 
+           [java.io Closeable FileInputStream]
+           [org.irods.jargon.ticket
+            TicketServiceFactoryImpl
             TicketAdminServiceImpl
             TicketClientSupport]
            [org.irods.jargon.ticket.packinstr
             TicketInp
             TicketCreateModeEnum]))
+
+(declare permissions)
 
 (def read-perm FilePermissionEnum/READ)
 (def write-perm FilePermissionEnum/WRITE)
@@ -45,13 +50,13 @@
 (def with-jargon-index (ref 0))
 (def ^:dynamic curr-with-jargon-index nil)
 
-(def default-proxy-ctor 
+(def default-proxy-ctor
   "This is the default constructor for creating an iRODS proxy."
   #(IRODSFileSystem/instance))
 
 (defn init
   "Creates the iRODS configuration map.
-   
+
     Parameters:
       host - The IP address or FQDN of the iRODS server that will be used.
       port - The IP port the iRODS server listens to.
@@ -63,9 +68,9 @@
       defaultResource - The default resource to use.
       max-retries - The number of times to retry connecting to the server.  This
         defaults to 0.
-      retry-sleep - The number of milliseconds to wait between connection 
+      retry-sleep - The number of milliseconds to wait between connection
         retries.  This defaults to 0.
-      use-trash - Indicates whether or to put deleted entries in the trash.  
+      use-trash - Indicates whether or to put deleted entries in the trash.
         This defaults to false.
       proxy-ctor - This is the constructor to use for creating the iRODS proxy.
         It takes no arguments, and the object its creates must implement have
@@ -74,14 +79,14 @@
          (^IRODSAccessObjectFactory getIRODSAccessObjectFactory [_])
          (^IRODSFileFactory getIRODSFileFactory [_ ^IRODSAccount acnt]))
         These must be sematically equivalent to the corresponding methods in
-        org.irods.jargon.core.pub.IRODSFileSystem.  This argument defaults to 
+        org.irods.jargon.core.pub.IRODSFileSystem.  This argument defaults to
         default-proxy-ctor.
 
     Returns:
       A map is returned with the provided parameters names and values forming
       the key-value pairs."
-  [host port user pass home zone res 
-   & {:keys [max-retries retry-sleep use-trash proxy-ctor] 
+  [host port user pass home zone res
+   & {:keys [max-retries retry-sleep use-trash proxy-ctor]
       :or   {max-retries 0
              retry-sleep 0
              use-trash   false
@@ -102,12 +107,12 @@
   ([cfg]
     (account cfg (:username cfg) (:password cfg)))
   ([cfg user pass]
-    (IRODSAccount. (:host cfg) 
-                   (Integer/parseInt (:port cfg)) 
-                   user 
-                   pass 
-                   (:home cfg) 
-                   (:zone cfg) 
+    (IRODSAccount. (:host cfg)
+                   (Integer/parseInt (:port cfg))
+                   user
+                   pass
+                   (:home cfg)
+                   (:zone cfg)
                    (:defaultResource cfg))))
 
 (defn clean-return
@@ -122,7 +127,7 @@
   (let [acnt        (account cfg)
         file-system ((:proxy-ctor cfg))
         aof         (.getIRODSAccessObjectFactory file-system)]
-    (assoc cfg 
+    (assoc cfg
       :irodsAccount        acnt
       :fileSystem          file-system
       :accessObjectFactory aof
@@ -132,7 +137,7 @@
       :userGroupAO         (.getUserGroupAO aof acnt)
       :fileFactory         (.getIRODSFileFactory file-system acnt)
       :fileSystemAO        (.getIRODSFileSystemAO aof acnt)
-      :lister              (.getCollectionAndDataObjectListAndSearchAO aof 
+      :lister              (.getCollectionAndDataObjectListAndSearchAO aof
                                                                        acnt)
       :quotaAO             (.getQuotaAO aof acnt)
       :executor            (.getIRODSGenQueryExecutor aof acnt))))
@@ -160,7 +165,7 @@
 
 (defn create-jargon-context-map
   "Creates a map containing instances of commonly used Jargon objects.
-  
+
    Throws:
      org.irods.jargon.core.exception.JargonException - This is thrown when if fails to connect to iRODS"
   [cfg]
@@ -172,10 +177,10 @@
         (and error? retry? (< num-tries (:max-retries cfg)))
         (do (Thread/sleep (:retry-sleep cfg))
           (recur (inc num-tries)))
-        
+
         error?
         (throw (:exception retval))
-        
+
         :else (:retval retval)))))
 
 (def max-path-length 1067)
@@ -200,11 +205,11 @@
      (> (count full-path) max-path-length)
      (throw+ {:error_code ERR_BAD_PATH_LENGTH
               :full-path full-path})
-     
+
      (> (count dir-path) max-dir-length)
      (throw+ {:error_code ERR_BAD_DIRNAME_LENGTH
               :dir-path dir-path
-              :full-path full-path}) 
+              :full-path full-path})
 
      (> (count file-path) max-filename-length)
      (throw+ {:error_code ERR_BAD_BASENAME_LENGTH
@@ -217,33 +222,208 @@
   (for [ug (.findUserGroupsForUser (:userGroupAO cm) user)]
     (.getUserGroupName ug)))
 
-(defn user-dataobject-perms
-  "Returns a set of permissions that user has for the dataobject at
-   data-path. Takes into account the groups that a user is in."
-  [cm user data-path]
-  (validate-path-lengths data-path)
-  (let [user-grps    (conj (user-groups cm user) user)
-        zone         (:zone cm)
-        dataObjectAO (:dataObjectAO cm)]
-    (set 
-      (filterv
-        #(not= %1 none-perm)
-        (for [username user-grps]
-          (.getPermissionForDataObject dataObjectAO data-path username zone))))))
+(defn result-row->vec
+  [rr]
+  (vec (.getColumnsAsList rr)))
+
+(defmacro print-it
+  [form]
+  `(let [res# ~form]
+     (println (str (quote ~form)) "=" res#)
+     res#))
+
+(defmacro print-result
+  [form]
+  `(let [res# ~form]
+     (println res#)
+     res#))
+
+(defn column-xformer
+  [col]
+  (cond
+   (= (type col) RodsGenQueryEnum)
+   (.getName col)
+
+   :else
+   col))
+
+(defn gen-query-col-names
+  [cols]
+  (into-array (mapv column-xformer cols)))
+
+(defn execute-gen-query
+  [cm sql cols]
+  (.getResults
+   (.executeIRODSQueryAndCloseResult
+    (:executor cm)
+    (IRODSGenQuery/instance
+     (String/format sql (gen-query-col-names cols))
+     500)
+    0)))
+
+(defn username->id
+  [cm user]
+  (->> (execute-gen-query cm
+        "select %s where %s = '%s'"
+        [RodsGenQueryEnum/COL_USER_ID
+         RodsGenQueryEnum/COL_USER_NAME
+         user])
+       (mapv result-row->vec)
+       (first)
+       (first)))
+
+(defn- collection-perms-rs
+  [cm user coll-path]
+  (execute-gen-query cm
+   "select %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_COLL_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    coll-path
+    RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
+    user]))
 
 (defn user-collection-perms
-  "Returns a set of permissions that a user has for the collection at
-   data-path. Takes into account the groups that a user is in. "
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (let [user-grps    (conj (user-groups cm user) user)
-        zone         (:zone cm)
-        collectionAO (:collectionAO cm)]
-    (set 
-      (filterv
-        #(not= %1 none-perm)
-        (for [username user-grps]
-          (.getPermissionForCollection collectionAO coll-path username zone))))))
+  (->> (conj (set (user-groups cm user)) user)
+       (map #(collection-perms-rs cm % coll-path))
+       (apply concat)
+       (map #(.getColumnsAsList %))
+       (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
+       (set)))
+
+(defn- dataobject-perms-rs
+  [cm user-id data-path]
+  (execute-gen-query cm
+   "select %s where %s = '%s' and %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_DATA_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    (ft/dirname data-path)
+    RodsGenQueryEnum/COL_DATA_NAME
+    (ft/basename data-path)
+    RodsGenQueryEnum/COL_DATA_ACCESS_USER_ID
+    user-id]))
+
+(defn user-dataobject-perms
+  [cm user data-path]
+  (validate-path-lengths data-path)
+  (->> (conj (set (user-groups cm user)) user)
+       (map (partial username->id cm))
+       (map #(dataobject-perms-rs cm % data-path))
+       (apply concat)
+       (map #(.getColumnsAsList %))
+       (map #(FilePermissionEnum/valueOf (Integer/parseInt (first %))))
+       (set)))
+
+(defn perm-map-for
+  [perms-code]
+  (let [perms (FilePermissionEnum/valueOf (Integer/parseInt perms-code))]
+    {:read  (contains? #{read-perm write-perm own-perm} perms)
+     :write (contains? #{write-perm own-perm} perms)
+     :own   (contains? #{own-perm} perms)}))
+
+(defn list-subdirs-rs
+  [cm user coll-path]
+  (execute-gen-query cm
+   "select %s, %s, %s, %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_COLL_NAME
+    RodsGenQueryEnum/COL_COLL_CREATE_TIME
+    RodsGenQueryEnum/COL_COLL_MODIFY_TIME
+    RodsGenQueryEnum/COL_COLL_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_PARENT_NAME
+    coll-path
+    RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
+    user]))
+
+(def perm-order-map
+  (into {} (map vector [read-perm write-perm own-perm] (range))))
+
+(defn str->perm-const
+  [s]
+  (FilePermissionEnum/valueOf (Integer/parseInt s)))
+
+(defn format-listing
+  [format-fn perm-pos listing]
+  (letfn [(select-listing [[_ v]]
+            [(apply max-key #(perm-order-map (str->perm-const (nth % perm-pos))) v)])]
+    (->> (apply concat listing)
+         (map result-row->vec)
+         (group-by first)
+         (mapcat select-listing)
+         (map format-fn))))
+
+(defn format-dir
+  [[path create-time mod-time perms]]
+  {:date-created  (str (* (Integer/parseInt create-time) 1000))
+   :date-modified (str (* (Integer/parseInt mod-time) 1000))
+   :file-size     0
+   :hasSubDirs    true
+   :id            path
+   :label         (ft/basename path)
+   :permissions   (perm-map-for perms)})
+
+(defn list-subdirs
+  [cm user coll-path]
+  (format-listing
+   format-dir 3
+   (map #(list-subdirs-rs cm % coll-path)
+        (conj (user-groups cm user) user))))
+
+(defn list-files-in-dir-rs
+  [cm user-id coll-path]
+  (execute-gen-query cm
+   "select %s, %s, %s, %s, %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_DATA_NAME
+    RodsGenQueryEnum/COL_D_CREATE_TIME
+    RodsGenQueryEnum/COL_D_MODIFY_TIME
+    RodsGenQueryEnum/COL_DATA_SIZE
+    RodsGenQueryEnum/COL_DATA_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    coll-path
+    RodsGenQueryEnum/COL_DATA_ACCESS_USER_ID
+    user-id]))
+
+(defn format-file
+  [coll-path [name create-time mod-time size perms]]
+  {:date-created  (str (* (Integer/parseInt create-time) 1000))
+   :date-modified (str (* (Integer/parseInt mod-time) 1000))
+   :file-size     size
+   :permissions   (perm-map-for perms)
+   :id            (ft/path-join coll-path name)
+   :label         name})
+
+(defn list-files-in-dir
+  [cm user coll-path]
+  (format-listing
+   (partial format-file coll-path) 4
+   (map #(list-files-in-dir-rs cm (username->id cm %) coll-path)
+        (conj (user-groups cm user) user))))
+
+(defn list-dir-rs
+  [cm user coll-path]
+  (execute-gen-query cm
+   "select %s, %s, %s, %s where %s = '%s' and %s = '%s'"
+   [RodsGenQueryEnum/COL_COLL_NAME
+    RodsGenQueryEnum/COL_COLL_CREATE_TIME
+    RodsGenQueryEnum/COL_COLL_MODIFY_TIME
+    RodsGenQueryEnum/COL_COLL_ACCESS_TYPE
+    RodsGenQueryEnum/COL_COLL_NAME
+    coll-path
+    RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
+    user]))
+
+(defn list-dir
+  [cm user coll-path & {:keys [include-files include-subdirs]
+                        :or   {include-files   false
+                               include-subdirs true}}]
+  (let [coll-path (ft/rm-last-slash coll-path)
+        listing   (first (map (comp format-dir result-row->vec) (list-dir-rs cm user coll-path)))]
+    (when-not (nil? listing)
+      (reduce (fn [listing [_ k f]] (assoc listing k (f cm user coll-path)))
+              listing
+              (filter first
+                      [[include-subdirs :folders list-subdirs]
+                       [include-files :files list-files-in-dir]])))))
 
 (defn dataobject-perm-map
   "Uses (user-dataobject-perms) to grab the 'raw' permissions for
@@ -294,7 +474,7 @@
   (validate-path-lengths data-path)
   (or (dataobject-perm? cm user data-path read-perm)
       (dataobject-perm? cm user data-path write-perm)))
-  
+
 (defn dataobject-writeable?
   "Checks to see if the user has write permissions on data-path. Only
    works for dataobjects."
@@ -400,10 +580,10 @@
      It returns true if the path points to a linked directory, otherwise it
      returns false."
   (validate-path-lengths path)
-  (= ObjStat$SpecColType/LINKED_COLL 
-     (.. (:fileFactory cm) 
-       (instanceIRODSFile (ft/rm-last-slash path)) 
-       initializeObjStatForFile 
+  (= ObjStat$SpecColType/LINKED_COLL
+     (.. (:fileFactory cm)
+       (instanceIRODSFile (ft/rm-last-slash path))
+       initializeObjStatForFile
        getSpecColType)))
 
 (defn user-perms->map
@@ -426,6 +606,42 @@
         user-perms->map
         (.listPermissionsForCollection (:collectionAO cm) path')))))
 
+(defn set-dataobj-perms
+  [cm user fpath read? write? own?]
+  (validate-path-lengths fpath)
+
+  (let [dataobj (:dataObjectAO cm)
+        zone    (:zone cm)]
+    (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)
+    (cond
+      own?   (.setAccessPermissionOwnInAdminMode dataobj zone fpath user)
+      write? (.setAccessPermissionWriteInAdminMode dataobj zone fpath user)
+      read?  (.setAccessPermissionReadInAdminMode dataobj zone fpath user))))
+
+(defn set-coll-perms
+  [cm user fpath read? write? own? recursive?]
+  (validate-path-lengths fpath)
+  (let [coll    (:collectionAO cm)
+        zone    (:zone cm)]
+    (.removeAccessPermissionForUserAsAdmin coll zone fpath user recursive?)
+
+    (cond
+      own?   (.setAccessPermissionOwnAsAdmin coll zone fpath user recursive?)
+      write? (.setAccessPermissionWriteAsAdmin coll zone fpath user recursive?)
+      read?  (.setAccessPermissionReadAsAdmin coll zone fpath user recursive?))))
+
+(defn set-permissions
+  ([cm user fpath read? write? own?]
+     (set-permissions cm user fpath read? write? own? false))
+  ([cm user fpath read? write? own? recursive?]
+     (validate-path-lengths fpath)
+     (cond
+      (is-file? cm fpath)
+      (set-dataobj-perms cm user fpath read? write? own?)
+
+      (is-dir? cm fpath)
+      (set-coll-perms cm user fpath read? write? own? recursive?))))
+
 (defn list-paths
   "Returns a list of paths for the entries under the parent path.  This is not
    recursive.  Directories end with /.
@@ -433,9 +649,9 @@
    Parameters:
      cm - The context map
      parent-path - The path of the parrent collection (directory).
-     :ignore-child-exns - When this flag is provided, child names that are too 
-       long will not cause an exception to be thrown.  If they are not ignored, 
-       an exception will be thrown, causing no paths to be listed.  An ignored 
+     :ignore-child-exns - When this flag is provided, child names that are too
+       long will not cause an exception to be thrown.  If they are not ignored,
+       an exception will be thrown, causing no paths to be listed.  An ignored
        child will be replaced with a nil in the returned list.
 
    Returns:
@@ -529,8 +745,8 @@
   [cm user]
   "Returns true if 'user' exists in iRODS."
   (try
-    (do 
-      (.findByName (:userAO cm) user) 
+    (do
+      (.findByName (:userAO cm) user)
       true)
     (catch java.lang.Exception d false)))
 
@@ -560,6 +776,17 @@
   (validate-path-lengths path)
   (if (is-dir? cm path)
     (.setAccessPermissionInherit (:collectionAO cm) (:zone cm) path false)))
+
+(defn permissions-inherited?
+  [cm path]
+  "Determines whether the inheritance attribute of a collection is true.
+
+    Parameters:
+      cm - The iRODS context map
+      path - The path being checked."
+  (validate-path-lengths path)
+  (when (is-dir? cm path)
+    (.isCollectionSetForPermissionInheritance (:collectionAO cm) path)))
 
 (defn is-writeable?
   [cm user path]
@@ -598,10 +825,10 @@
 
    (is-dir? cm path)
    (collection-readable? cm user (ft/rm-last-slash path))
-   
+
    (is-file? cm path)
    (dataobject-readable? cm user (ft/rm-last-slash path))
-   
+
    :else
    false))
 
@@ -620,7 +847,7 @@
     Returns:
       String containing the name of the last directory in the path."
   (validate-path-lengths path)
-  (.getCollectionLastPathComponent 
+  (.getCollectionLastPathComponent
     (.findByAbsolutePath (:collectionAO cm) (ft/rm-last-slash path))))
 
 (defn sub-collections
@@ -685,10 +912,10 @@
       user - A string containing the username of the user requesting the check.
       paths - A sequence of strings containing the paths to be checked."
   (doseq [p paths] (validate-path-lengths p))
-  (reduce 
-    #(and %1 %2) 
-    (map 
-      #(is-writeable? cm user %) 
+  (reduce
+    #(and %1 %2)
+    (map
+      #(is-writeable? cm user %)
       paths)))
 
 ;;Metadata
@@ -729,8 +956,8 @@
   "Sets an avu for dir-path."
   (validate-path-lengths dir-path)
   (let [avu    (AvuData/instance attr value unit)
-        ao-obj (if (is-dir? cm dir-path) 
-                 (:collectionAO cm) 
+        ao-obj (if (is-dir? cm dir-path)
+                 (:collectionAO cm)
                  (:dataObjectAO cm))]
     (if (zero? (count (get-attribute cm dir-path attr)))
       (.addAVUMetadata ao-obj dir-path avu)
@@ -743,8 +970,8 @@
   (validate-path-lengths dir-path)
   (let [fattr  (first (get-attribute cm dir-path attr))
         avu    (map2avu fattr)
-        ao-obj (if (is-dir? cm dir-path) 
-                 (:collectionAO cm) 
+        ao-obj (if (is-dir? cm dir-path)
+                 (:collectionAO cm)
                  (:dataObjectAO cm))]
     (.deleteAVUMetadata ao-obj dir-path avu)))
 
@@ -802,6 +1029,160 @@
   (let [query    (build-file-avu-query name op value)
         rs       (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
     (map #(string/join "/" (.getColumnsAsList %)) (.getResults rs))))
+
+(def ^:private file-avu-query-columns
+  {:name  RodsGenQueryEnum/COL_META_DATA_ATTR_NAME
+   :value RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
+   :unit  RodsGenQueryEnum/COL_META_DATA_ATTR_UNITS})
+
+(def ^:private dir-avu-query-columns
+  {:name  RodsGenQueryEnum/COL_META_COLL_ATTR_NAME
+   :value RodsGenQueryEnum/COL_META_COLL_ATTR_VALUE
+   :unit  RodsGenQueryEnum/COL_META_COLL_ATTR_UNITS})
+
+(defn- add-conditions-from-avu-spec
+  "Adds conditions from an AVU specification to a general query builder. The query specification
+   is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values."
+  [cols builder avu-spec]
+  (->> (remove (comp nil? last) avu-spec)
+       (map (fn [[k v]] [(cols k) v]))
+       (remove (comp nil? first))
+       (map
+        (fn [[col v]]
+          (.addConditionAsGenQueryField builder col QueryConditionOperators/EQUAL v)))
+       (dorun)))
+
+(defn- build-subtree-query-from-avu-spec
+  "Builds a subtree query from a path and an AVU specification.  The AVU specification is a map
+   in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  [select-columns condition-columns path avu-spec]
+  (let [builder (IRODSGenQueryBuilder. true nil)]
+    (dorun (map #(.addSelectAsGenQueryValue builder %) select-columns))
+    (when path
+      (.addConditionAsGenQueryField builder
+                                    RodsGenQueryEnum/COL_COLL_NAME
+                                    QueryConditionOperators/LIKE
+                                    (str path \%)))
+    (add-conditions-from-avu-spec condition-columns builder avu-spec)
+    (.exportIRODSQueryFromBuilder builder 500)))
+
+(defn- list-items-in-tree-with-attr
+  "Lists either files or directories in a subtree given the path to the root of the subtree and an
+   AVU specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search.
+
+   The select-columns parameter indicates which columns should be selected from the query.  The
+   condition-columns parameter is a map indicating which constants to use in the query for the
+   :name, :value, and :unit elements of the AVU specification.  The format-row parameter is a
+   function that can be used to format each row in the result set.  The single parameter to this
+   function is an instance of IRODSQueryResultRow."
+  [select-columns condition-columns format-row cm path avu-spec]
+  (let [query (build-subtree-query-from-avu-spec select-columns condition-columns path avu-spec)]
+    (->> (.executeIRODSQueryAndCloseResult (:executor cm) query 0)
+         (.getResults)
+         (mapv format-row))))
+
+(def list-files-in-tree-with-attr
+  "Lists the paths to files in a subtree given the path to the root of the subtree and an AVU
+   specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  (partial list-items-in-tree-with-attr
+           [RodsGenQueryEnum/COL_COLL_NAME RodsGenQueryEnum/COL_DATA_NAME]
+           file-avu-query-columns
+           #(string/join "/" (.getColumnsAsList %))))
+
+(def list-collections-in-tree-with-attr
+  "Lists the paths to directories in a subtree given the path to the root of the subtree and an
+   AVU specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  (partial list-items-in-tree-with-attr
+           [RodsGenQueryEnum/COL_COLL_NAME]
+           dir-avu-query-columns
+           #(str (first (.getColumnsAsList %)))))
+
+(defn list-everything-in-tree-with-attr
+  [cm path avu-spec]
+  "Lists the paths to both files and directories in a subtree given the path to the root of the
+   subtree and an AVU specification. The AVU specification is a map in the following format:
+
+       {:name  \"name\"
+        :value \"value\"
+        :unit  \"unit\"}
+
+   The values in the map are strings indicating the name, value or unit of the AVUs to match. Each
+   entry in the map is optional, so that the caller can search for any combination of name and
+   value. For example, to search for AVUs named 'foo', the AVU specification would simply be
+   {:name \"foo\"}. Unrecognized keys in the AVU specification are currently ignored and conditions
+   are not added for null values.
+
+   The path is the absolute path to the root of the subtree to search. Items that are not in this
+   directory or any of its descendants will not be matched. The root of the subtree is included
+   in the search."
+  (doall (mapcat #(% cm path avu-spec)
+                 [list-collections-in-tree-with-attr list-files-in-tree-with-attr])))
 
 (defn get-avus-by-collection
   "Returns AVUs associated with a collection that have the given attribute and value."
@@ -865,27 +1246,122 @@
         (.directoryDeleteForce fileSystemAO resource)
         (.fileDeleteForce fileSystemAO resource)))))
 
+(defn process-perms
+  [f cm path user admin-users]
+  (->> (list-user-perms cm path)
+       (remove (comp (conj admin-users user (:username cm)) :user))
+       (map f)
+       (dorun)))
+
+(defn process-parent-dirs
+  [f process? path]
+  (loop [dir-path (ft/dirname path)]
+    (when (process? dir-path)
+      (log/debug "processing directory:" dir-path)
+      (f dir-path)
+      (recur (ft/dirname dir-path)))))
+
+(defn set-readable
+  [cm username readable? path]
+  (let [{curr-write :write curr-own :own} (permissions cm username path)]
+    (set-permissions cm username path readable? curr-write curr-own)))
+
+(defn contains-accessible-obj?
+  [cm user dpath]
+  (some #(is-readable? cm user %1) (list-paths cm dpath)))
+
+(defn reset-perms
+  [cm path user admin-users]
+  (process-perms
+   #(set-permissions cm (:user %) path false false false true)
+   cm path user admin-users))
+
+(defn inherit-perms
+  [cm path user admin-users]
+  (let [parent (ft/dirname path)]
+    (process-perms
+     (fn [{sharee :user {r :read w :write o :own} :permissions}]
+       (set-permissions cm sharee path r w o true))
+     cm parent user admin-users)))
+
+(defn remove-obsolete-perms
+  "Removes permissions that are no longer required for a directory that isn't shared.  Read
+   permissions are no longer required for any user who no longer has access to any file or
+   subdirectory."
+  [cm path user admin-users]
+  (let [parent   (ft/dirname path)
+        base-dir (ft/path-join (:home cm) user)]
+    (process-perms
+     (fn [{sharee :user}]
+       (process-parent-dirs
+        (partial set-readable cm sharee false)
+        #(and (not= % base-dir) (not (contains-accessible-obj? cm sharee %)))
+        path))
+     cm parent user admin-users)))
+
+(defn make-file-accessible
+  "Ensures that a file is accessible to all users that have access to the file."
+  [cm path user admin-users]
+  (let [parent   (ft/dirname path)
+        base-dir (ft/path-join (:home cm) user)]
+    (process-perms
+     (fn [{sharee :user}]
+       (process-parent-dirs (partial set-readable cm sharee true) #(not= % base-dir) path))
+     cm path user admin-users)))
+
+(def ^:private perm-fix-fns
+  "Functions used to update permissions after something is moved, indexed by the inherit flag
+   of the source directory followed by the destination directory."
+  {true  {true  (fn [cm src dst user admin-users]
+                  (reset-perms cm dst user admin-users)
+                  (inherit-perms cm dst user admin-users))
+
+          false (fn [cm src dst user admin-users]
+                  (reset-perms cm dst user admin-users))}
+
+   false {true  (fn [cm src dst user admin-users]
+                  (remove-obsolete-perms cm src user admin-users)
+                  (reset-perms cm dst user admin-users)
+                  (inherit-perms cm dst user admin-users))
+
+          false (fn [cm src dst user admin-users]
+                  (remove-obsolete-perms cm src user admin-users)
+                  (make-file-accessible cm dst user admin-users))}})
+
+(defn fix-perms
+  [cm src dst user admin-users]
+  (let [src-dir (ft/dirname src)
+        dst-dir (ft/dirname dst)]
+    (when-not (= src-dir dst-dir)
+      ((get-in perm-fix-fns (mapv #(permissions-inherited? cm %) [src-dir dst-dir]))
+       cm (.getPath src) (.getPath dst) user admin-users))))
+
 (defn move
-  [cm source dest]
+  [cm source dest & {:keys [admin-users user]
+                     :or {admin-users #{}}}]
   (validate-path-lengths source)
   (validate-path-lengths dest)
-  
+
   (let [fileSystemAO (:fileSystemAO cm)
         src          (file cm source)
         dst          (file cm dest)]
     #_(validate-path-lengths dest)
-    
+
     (if (is-file? cm source)
       (.renameFile fileSystemAO src dst)
-      (.renameDirectory fileSystemAO src dst))))
+      (.renameDirectory fileSystemAO src dst))
+
+    (fix-perms cm src dst user admin-users)))
 
 (defn move-all
-  [cm sources dest]
+  [cm sources dest & {:keys [admin-users user]
+                      :or {admin-users #{}}}]
   (doseq [s sources] (validate-path-lengths (ft/path-join dest (ft/basename s))))
-  
-  (mapv 
-    #(move cm %1 (ft/path-join dest (ft/basename %1))) 
-    sources))
+
+  (dorun
+   (map
+    #(move cm %1 (ft/path-join dest (ft/basename %1)) :user user :admin-users admin-users)
+    sources)))
 
 (defn output-stream
   "Returns an FileOutputStream for a file in iRODS pointed to by 'output-path'."
@@ -905,7 +1381,7 @@
     (available [] (.available istream))
     (mark [readlimit] (.mark istream readlimit))
     (markSupported [] (.markSupported istream))
-    (read 
+    (read
       ([] (.read istream))
       ([b] (.read istream b))
       ([b off len] (.read istream b off len)))
@@ -923,7 +1399,7 @@
 (defn shopping-cart
   [filepaths]
   (doseq [fp filepaths] (validate-path-lengths fp))
-  
+
   (let [cart (FileShoppingCart/instance)]
     (loop [fps filepaths]
       (.addAnItem cart (ShoppingCartEntry/instance (first fps)))
@@ -937,18 +1413,18 @@
 
 (defn cart-service
   [cm]
-  (ShoppingCartServiceImpl. 
-    (:accessObjectFactory cm) 
-    (:irodsAccount cm) 
+  (ShoppingCartServiceImpl.
+    (:accessObjectFactory cm)
+    (:irodsAccount cm)
     (DataCacheServiceFactoryImpl. (:accessObjectFactory cm))))
 
 (defn store-cart
   [cm user cart-key filepaths]
   (doseq [fp filepaths] (validate-path-lengths fp))
-  (.serializeShoppingCartAsSpecifiedUser 
-    (cart-service cm) 
-    (shopping-cart filepaths) 
-    cart-key 
+  (.serializeShoppingCartAsSpecifiedUser
+    (cart-service cm)
+    (shopping-cart filepaths)
+    cart-key
     user))
 
 (defn permissions
@@ -957,7 +1433,7 @@
   (cond
     (is-dir? cm fpath)
     (collection-perm-map cm user fpath)
-    
+
     (is-file? cm fpath)
     (dataobject-perm-map cm user fpath)
 
@@ -971,55 +1447,19 @@
   (validate-path-lengths fpath)
   (cond
    (is-file? cm fpath)
-   (.removeAccessPermissionsForUserInAdminMode 
-     (:dataObjectAO cm) 
-     (:zone cm) 
-     fpath 
+   (.removeAccessPermissionsForUserInAdminMode
+     (:dataObjectAO cm)
+     (:zone cm)
+     fpath
      user)
-   
+
    (is-dir? cm fpath)
-   (.removeAccessPermissionForUserAsAdmin 
-     (:collectionAO cm) 
-     (:zone cm) 
-     fpath 
-     user 
+   (.removeAccessPermissionForUserAsAdmin
+     (:collectionAO cm)
+     (:zone cm)
+     fpath
+     user
      true)))
-
-(defn set-dataobj-perms
-  [cm user fpath read? write? own?]
-  (validate-path-lengths fpath)
-  
-  (let [dataobj (:dataObjectAO cm)
-        zone    (:zone cm)] 
-    (.removeAccessPermissionsForUserInAdminMode dataobj zone fpath user)           
-    (cond
-      own?   (.setAccessPermissionOwnInAdminMode dataobj zone fpath user)
-      write? (.setAccessPermissionWriteInAdminMode dataobj zone fpath user)
-      read?  (.setAccessPermissionReadInAdminMode dataobj zone fpath user))))
-
-(defn set-coll-perms
-  [cm user fpath read? write? own? recursive?]
-  (validate-path-lengths fpath)
-  (let [coll    (:collectionAO cm)
-        zone    (:zone cm)]
-    (.removeAccessPermissionForUserAsAdmin coll zone fpath user recursive?)
-    
-    (cond
-      own?   (.setAccessPermissionOwnAsAdmin coll zone fpath user recursive?)
-      write? (.setAccessPermissionWriteAsAdmin coll zone fpath user recursive?)
-      read?  (.setAccessPermissionReadAsAdmin coll zone fpath user recursive?))))
-
-(defn set-permissions
-  ([cm user fpath read? write? own?]
-     (set-permissions cm user fpath read? write? own? false))
-  ([cm user fpath read? write? own? recursive?]
-     (validate-path-lengths fpath)
-     (cond
-      (is-file? cm fpath)
-      (set-dataobj-perms cm user fpath read? write? own?)
-      
-      (is-dir? cm fpath)
-      (set-coll-perms cm user fpath read? write? own? recursive?))))
 
 (defn owns?
   [cm user fpath]
@@ -1027,10 +1467,10 @@
   (cond
     (is-file? cm fpath)
     (owns-dataobject? cm user fpath)
-    
+
     (is-dir? cm fpath)
     (owns-collection? cm user fpath)
-    
+
     :else
     false))
 
@@ -1039,18 +1479,18 @@
   (validate-path-lengths abs-path)
   (cond
    (is-file? cm abs-path)
-   (.removeAccessPermissionsForUserInAdminMode 
-     (:dataObjectAO cm) 
-     (:zone cm) 
-     abs-path 
+   (.removeAccessPermissionsForUserInAdminMode
+     (:dataObjectAO cm)
+     (:zone cm)
+     abs-path
      user)
 
    (is-dir? cm abs-path)
-   (.removeAccessPermissionForUserAsAdmin 
-     (:collectionAO cm) 
-     (:zone cm) 
-     abs-path 
-     user 
+   (.removeAccessPermissionForUserAsAdmin
+     (:collectionAO cm)
+     (:zone cm)
+     abs-path
+     user
      false)))
 
 (defn removed-owners
@@ -1071,7 +1511,7 @@
                       #(not (contains? set-of-new-owners %1))
                       (map :user curr-user-perms))]
       (remove-access-permissions cm non-user abs-path))
-    
+
     (doseq [new-owner set-of-new-owners]
       (set-owner cm abs-path new-owner))))
 
@@ -1086,7 +1526,7 @@
 (defn set-ticket-options
   "Sets the optional settings for a ticket, such as the expiration date
    and the uses limit."
-  [ticket-id tas 
+  [ticket-id tas
    {:keys [byte-write-limit expiry file-write-limit uses-limit]}]
   (when byte-write-limit
     (.setTicketByteWriteLimit tas ticket-id byte-write-limit))
@@ -1125,8 +1565,8 @@
   "Looks up the ticket by the provided ticket-id string and
    returns an instance of Ticket."
   [cm user ticket-id]
-  (.getTicketForSpecifiedTicketString 
-    (ticket-admin-service cm user) 
+  (.getTicketForSpecifiedTicketString
+    (ticket-admin-service cm user)
     ticket-id))
 
 (defn ticket-obj->map
@@ -1166,7 +1606,7 @@
   (.. (:accessObjectFactory cm)
     getIrodsSession
     (currentConnection (:irodsAccount cm))
-    (irodsFunction 
+    (irodsFunction
       (TicketInp/instanceForSetSessionWithTicket ticket-id))))
 
 (defn ticket-input-stream
@@ -1176,7 +1616,7 @@
 
 (defn quota-map
   [quota-entry]
-  (hash-map 
+  (hash-map
     :resource (.getResourceName quota-entry)
     :zone     (.getZoneName quota-entry)
     :user     (.getUserName quota-entry)
@@ -1196,26 +1636,23 @@
   [cm source dest]
   (validate-path-lengths source)
   (validate-path-lengths dest)
-  
+
   (let [dto (data-transfer-obj cm)
         res (or (:defaultResource cm) "demoResc")]
     (.copy dto source res dest nil nil)))
 
 (defmacro with-jargon
-  "An iRODS connection is opened, binding the connection's context to the 
-    symbolic cm-sym value.  Next it evaluates the body expressions.  Finally, it
-    closes the iRODS connection*.  The body expressions should use the value of
-    cm-sym to access the iRODS context.
+  "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value.
+   Next it evaluates the body expressions. Finally, it closes the iRODS connection*. The body
+   expressions should use the value of cm-sym to access the iRODS context.
 
-    Parameters:
-      cfg - The Jargon configuration used to connect to iRODS.
-      [cm-sym] - Holds the name of the binding to the iRODS context map used by 
-        the body expressions.
-      body - Zero or more expressions to be evaluated while an iRODS connection
-        is open.
+   Parameters:
+     cfg - The Jargon configuration used to connect to iRODS.
+     [cm-sym] - Holds the name of the binding to the iRODS context map used by the body expressions.
+     body - Zero or more expressions to be evaluated while an iRODS connection is open.
 
-    Returns:
-      It returns the result from evaluating the last expression in the body.*
+   Returns:
+     It returns the result from evaluating the last expression in the body.*
 
     Throws:
       org.irods.jargon.core.exception.JargonException - This is thrown when if fails to connect to iRODS
@@ -1223,22 +1660,26 @@
     Example:
       (def config (init ...))
 
-      (with-jargon config
-        [ctx] 
-        (list-all ctx \"/zone/home/user/\"))
+     (with-jargon config
+       [ctx]
+       (list-all ctx \"/zone/home/user/\"))
 
-    * If an IRODSFileInputStream is the result of the last body expression, the
-      iRODS connection is not closed.  Instead, an special InputStream is 
-      returned than when closed, closes the iRODS connection is well."
+   * If an IRODSFileInputStream is the result of the last body expression, the iRODS connection is
+     not closed. Instead, a special InputStream is returned than when closed, closes the iRODS
+     connection is well."
   [cfg [cm-sym] & body]
   `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
      (log/debug "curr-with-jargon-index:" curr-with-jargon-index)
-     (let [~cm-sym (create-jargon-context-map ~cfg)
-           retval# (do ~@body)]
-       (if (instance? IRODSFileInputStream retval#)
-         (do (log/debug curr-with-jargon-index 
-                        "- returning a proxy input stream...")
-             (proxy-input-stream ~cm-sym retval#)) ;The proxied InputStream handles clean up.
-         (do (log/debug curr-with-jargon-index 
-                        "- cleaning up and returning a plain value")
-             (clean-return ~cm-sym retval#))))))
+     (when-let [~cm-sym (create-jargon-context-map ~cfg)]
+       (ss/try+
+         (let [retval# (do ~@body)]
+           (if (instance? IRODSFileInputStream retval#)
+             (do (log/debug curr-with-jargon-index "- returning a proxy input stream...")
+                 (proxy-input-stream ~cm-sym retval#)) ;The proxied InputStream handles clean up.
+             (do (log/debug curr-with-jargon-index "- cleaning up and returning a plain value")
+                 (clean-return ~cm-sym retval#))))
+         (catch Object o1#
+           (ss/try+
+             (.close (:fileSystem ~cm-sym))
+             (catch Object o2#))
+           (ss/throw+))))))

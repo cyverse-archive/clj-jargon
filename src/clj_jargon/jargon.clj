@@ -216,6 +216,13 @@
               :file-path file-path
               :full-path full-path}))))
 
+(defn trash-base-dir
+  "Returns the base trash directory either for all users or for a specified user."
+  ([cm]
+     (ft/path-join "/" (:zone cm) "trash" "home" (:username cm)))
+  ([cm user]
+     (ft/path-join (trash-base-dir cm) user)))
+
 (defn user-groups
   "Returns a list of group names that the user is in."
   [cm user]
@@ -245,7 +252,7 @@
    (.getName col)
 
    :else
-   col))
+   (string/replace col #"'" "\\'")))
 
 (defn gen-query-col-names
   [cols]
@@ -1257,7 +1264,7 @@
   [f process? path]
   (loop [dir-path (ft/dirname path)]
     (when (process? dir-path)
-      (log/debug "processing directory:" dir-path)
+      (log/warn "processing directory:" dir-path)
       (f dir-path)
       (recur (ft/dirname dir-path)))))
 
@@ -1289,24 +1296,24 @@
    permissions are no longer required for any user who no longer has access to any file or
    subdirectory."
   [cm path user admin-users]
-  (let [parent   (ft/dirname path)
-        base-dir (ft/path-join (:home cm) user)]
+  (let [parent    (ft/dirname path)
+        base-dirs #{(ft/rm-last-slash (:home cm)) (trash-base-dir cm)}]
     (process-perms
      (fn [{sharee :user}]
        (process-parent-dirs
         (partial set-readable cm sharee false)
-        #(and (not= % base-dir) (not (contains-accessible-obj? cm sharee %)))
+        #(and (not (base-dirs %)) (not (contains-accessible-obj? cm sharee %)))
         path))
      cm parent user admin-users)))
 
 (defn make-file-accessible
   "Ensures that a file is accessible to all users that have access to the file."
   [cm path user admin-users]
-  (let [parent   (ft/dirname path)
-        base-dir (ft/path-join (:home cm) user)]
+  (let [parent    (ft/dirname path)
+        base-dirs #{(ft/rm-last-slash (:home cm)) (trash-base-dir cm)}]
     (process-perms
      (fn [{sharee :user}]
-       (process-parent-dirs (partial set-readable cm sharee true) #(not= % base-dir) path))
+       (process-parent-dirs (partial set-readable cm sharee true) #(not (base-dirs %)) path))
      cm path user admin-users)))
 
 (def ^:private perm-fix-fns

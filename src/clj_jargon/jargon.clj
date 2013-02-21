@@ -1282,7 +1282,7 @@
    subdirectory."
   [cm path user admin-users]
   (let [parent   (ft/dirname path)
-        base-dir (ft/path-join (:home cm) user)]
+        base-dir (ft/rm-last-slash (:home cm))]
     (process-perms
      (fn [{sharee :user}]
        (process-parent-dirs
@@ -1295,7 +1295,7 @@
   "Ensures that a file is accessible to all users that have access to the file."
   [cm path user admin-users]
   (let [parent   (ft/dirname path)
-        base-dir (ft/path-join (:home cm) user)]
+        base-dir (ft/rm-last-slash (:home cm))]
     (process-perms
      (fn [{sharee :user}]
        (process-parent-dirs (partial set-readable cm sharee true) #(not= % base-dir) path))

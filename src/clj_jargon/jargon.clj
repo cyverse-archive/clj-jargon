@@ -245,7 +245,7 @@
    (.getName col)
 
    :else
-   (string/replace col #"'" "\\'")))
+   (string/replace col #"'" "\\\\'")))
 
 (defn gen-query-col-names
   [cols]

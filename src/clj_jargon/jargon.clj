@@ -364,10 +364,11 @@
 
 (defn list-subdirs
   [cm user coll-path]
-  (format-listing
-   format-dir 3
-   (map #(list-subdirs-rs cm % coll-path)
-        (conj (user-groups cm user) user))))
+  (sort-by (comp string/upper-case :label)
+           (format-listing
+            format-dir 3
+            (map #(list-subdirs-rs cm % coll-path)
+                 (conj (user-groups cm user) user)))))
 
 (defn list-files-in-dir-rs
   [cm user-id coll-path]
@@ -394,10 +395,11 @@
 
 (defn list-files-in-dir
   [cm user coll-path]
-  (format-listing
-   (partial format-file coll-path) 4
-   (map #(list-files-in-dir-rs cm (username->id cm %) coll-path)
-        (conj (user-groups cm user) user))))
+  (sort-by (comp string/upper-case :label)
+           (format-listing
+            (partial format-file coll-path) 4
+            (map #(list-files-in-dir-rs cm (username->id cm %) coll-path)
+                 (conj (user-groups cm user) user)))))
 
 (defn list-dir-rs
   [cm user coll-path]

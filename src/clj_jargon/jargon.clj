@@ -1321,30 +1321,31 @@
 (def ^:private perm-fix-fns
   "Functions used to update permissions after something is moved, indexed by the inherit flag
    of the source directory followed by the destination directory."
-  {true  {true  (fn [cm src dst user admin-users]
+  {true  {true  (fn [cm src dst user admin-users skip-source-perms?]
                   (reset-perms cm dst user admin-users)
                   (inherit-perms cm dst user admin-users))
 
-          false (fn [cm src dst user admin-users]
+          false (fn [cm src dst user admin-users skip-source-perms?]
                   (reset-perms cm dst user admin-users))}
 
-   false {true  (fn [cm src dst user admin-users]
-                  (remove-obsolete-perms cm src user admin-users)
+   false {true  (fn [cm src dst user admin-users skip-source-perms?]
+                  (when-not skip-source-perms?
+                    (remove-obsolete-perms cm src user admin-users))
                   (reset-perms cm dst user admin-users)
                   (inherit-perms cm dst user admin-users))
 
-          false (fn [cm src dst user admin-users]
-                  (remove-obsolete-perms cm src user admin-users)
+          false (fn [cm src dst user admin-users skip-source-perms?]
+                  (when-not skip-source-perms?
+                    (remove-obsolete-perms cm src user admin-users))
                   (make-file-accessible cm dst user admin-users))}})
 
 (defn fix-perms
   [cm src dst user admin-users skip-source-perms?]
   (let [src-dir       (ft/dirname src)
-        dst-dir       (ft/dirname dst)
-        dirs-to-check (if-not skip-source-perms? [src-dir dst-dir] [dst-dir])]
+        dst-dir       (ft/dirname dst)]
     (when-not (= src-dir dst-dir)
-      ((get-in perm-fix-fns (mapv #(permissions-inherited? cm %) dirs-to-check))
-       cm (.getPath src) (.getPath dst) user admin-users))))
+      ((get-in perm-fix-fns (mapv #(permissions-inherited? cm %) [src-dir dst-dir]))
+       cm (.getPath src) (.getPath dst) user admin-users skip-source-perms?))))
 
 (defn move
   "Moves a file/dir from source path 'source' into destination directory 'dest'.

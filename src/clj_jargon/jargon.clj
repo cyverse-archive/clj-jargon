@@ -1338,29 +1338,39 @@
                   (make-file-accessible cm dst user admin-users))}})
 
 (defn fix-perms
-  [cm src dst user admin-users]
-  (let [src-dir (ft/dirname src)
-        dst-dir (ft/dirname dst)]
+  [cm src dst user admin-users skip-source-perms?]
+  (let [src-dir       (ft/dirname src)
+        dst-dir       (ft/dirname dst)
+        dirs-to-check (if-not skip-source-perms? [src-dir dst-dir] [dst-dir])]
     (when-not (= src-dir dst-dir)
-      ((get-in perm-fix-fns (mapv #(permissions-inherited? cm %) [src-dir dst-dir]))
+      ((get-in perm-fix-fns (mapv #(permissions-inherited? cm %) dirs-to-check))
        cm (.getPath src) (.getPath dst) user admin-users))))
 
 (defn move
-  [cm source dest & {:keys [admin-users user]
-                     :or {admin-users #{}}}]
+  "Moves a file/dir from source path 'source' into destination directory 'dest'.
+
+   Parameters:
+     source - String containing the path to the file/dir being moved.
+     dest - String containing the path to the destination directory. Should not end with a slash.
+     :admin-users (optional) - List of users that must retain ownership on the file/dir being moved.
+     :user (optional) - The username of the user performing the move.
+     :skip-source-perms? (optional) - Boolean the tells move to skip ensuring that permissions for
+                                      the admin users are correct."
+  [cm source dest & {:keys [admin-users user skip-source-perms?]
+                     :or   {admin-users #{}
+                            skip-source-perms? false}}]
   (validate-path-lengths source)
   (validate-path-lengths dest)
 
   (let [fileSystemAO (:fileSystemAO cm)
         src          (file cm source)
         dst          (file cm dest)]
-    #_(validate-path-lengths dest)
 
     (if (is-file? cm source)
       (.renameFile fileSystemAO src dst)
       (.renameDirectory fileSystemAO src dst))
 
-    (fix-perms cm src dst user admin-users)))
+    (fix-perms cm src dst user admin-users skip-source-perms?)))
 
 (defn move-all
   [cm sources dest & {:keys [admin-users user]

@@ -421,6 +421,20 @@
     RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
     user]))
 
+(defn list-users-shared-with-rs
+  [cm coll-path]
+  (execute-gen-query cm
+    "select %s where %s = '%s' and %s = '%s'"
+    [RodsGenQueryEnum/COL_META_COLL_ATTR_NAME
+     RodsGenQueryEnum/COL_META_COLL_ATTR_UNITS
+     "ipc-contains-obj-shared-with"
+     RodsGenQueryEnum/COL_COLL_NAME
+     coll-path]))
+
+(defn list-users-shared-with
+  [cm coll-path]
+  (into [] (flatten (map result-row->vec (list-users-shared-with-rs cm coll-path)))))
+
 (defn list-dir
   [cm user coll-path & {:keys [include-files include-subdirs]
                         :or   {include-files   false

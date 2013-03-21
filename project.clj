@@ -2,7 +2,7 @@
   :description "Clojure API on top of iRODS's jargon-core."
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [org.iplantc/clojure-commons "1.4.1-SNAPSHOT"]
-                 [org.irods.jargon/jargon-core "3.3.0"
+                 [org.irods.jargon/jargon-core "3.3.2-SNAPSHOT"
                   :exclusions [org.jglobus/JGlobus-Core]]
                  [org.irods.jargon/jargon-data-utils "3.3.0"]
                  [org.irods.jargon.transfer/jargon-transfer-engine "3.3.0"]

@@ -265,7 +265,7 @@
     (:executor cm)
     (IRODSGenQuery/instance
      (String/format sql (gen-query-col-names cols))
-     500)
+     50000)
     0)))
 
 (defn username->id
@@ -1017,7 +1017,7 @@
                                     QueryConditionOperators/EQUAL name)
       (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
                                     (op->constant op) value)
-      (.exportIRODSQueryFromBuilder 500)))
+      (.exportIRODSQueryFromBuilder 50000)))
 
 (defn build-query-for-avu-by-obj
   [file-path attr op value]
@@ -1031,7 +1031,7 @@
                                     QueryConditionOperators/EQUAL attr)
       (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
                                     (op->constant op) value)
-      (.exportIRODSQueryFromBuilder 500)))
+      (.exportIRODSQueryFromBuilder 50000)))
 
 (defn list-files-with-avu
   [cm name op value]
@@ -1097,7 +1097,7 @@
                                     QueryConditionOperators/LIKE
                                     (str path \%)))
     (add-conditions-from-avu-spec condition-columns builder avu-spec)
-    (.exportIRODSQueryFromBuilder builder 500)))
+    (.exportIRODSQueryFromBuilder builder 50000)))
 
 (defn- list-items-in-tree-with-attr
   "Lists either files or directories in a subtree given the path to the root of the subtree and an

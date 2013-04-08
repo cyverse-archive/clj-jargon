@@ -1689,7 +1689,7 @@
       (.close))
     (bytes->string buffer)))
 
-(defn write-at-position
+(defn overwrite-at-position
   [cm filepath position update]
   (let [access-file  (random-access-file cm filepath)
         update-bytes (.getBytes update)

@@ -14,7 +14,9 @@
            [org.irods.jargon.core.pub IRODSFileSystem]
            [org.irods.jargon.core.pub.io
             IRODSFileReader
-            IRODSFileInputStream]
+            IRODSFileInputStream
+            FileIOOperations
+            FileIOOperations$SeekWhenceType]
            [org.irods.jargon.core.query
             IRODSGenQuery
             IRODSGenQueryBuilder
@@ -1660,6 +1662,43 @@
   (let [dto (data-transfer-obj cm)
         res (or (:defaultResource cm) "demoResc")]
     (.copy dto source res dest nil nil)))
+
+(def SEEK-CURRENT (FileIOOperations$SeekWhenceType/SEEK_CURRENT))
+(def SEEK-START (FileIOOperations$SeekWhenceType/SEEK_START))
+(def SEEK-END (FileIOOperations$SeekWhenceType/SEEK_END))
+
+(defn bytes->string
+  [buffer]
+  (apply str (map char buffer)))
+
+(defn random-access-file
+  [cm filepath]
+  (.instanceIRODSRandomAccessFile (:fileFactory cm) filepath))
+
+(defn file-length-bytes
+  [cm filepath]
+  (.length (random-access-file cm filepath)))
+
+(defn read-at-position
+  [cm filepath position num-bytes]
+  (let [access-file (random-access-file cm filepath)
+        buffer      (byte-array num-bytes)]
+    (doto access-file
+      (.seek position SEEK-CURRENT)
+      (.read buffer)
+      (.close))
+    (bytes->string buffer)))
+
+(defn write-at-position
+  [cm filepath position update]
+  (let [access-file  (random-access-file cm filepath)
+        update-bytes (.getBytes update)
+        read-buffer  (byte-array (count update-bytes))]
+    (doto access-file
+      (.seek position SEEK-CURRENT)
+      (.write update-bytes)
+      (.close))
+    nil))
 
 (defmacro with-jargon
   "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value.

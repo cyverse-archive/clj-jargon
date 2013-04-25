@@ -962,6 +962,14 @@
   (validate-path-lengths dir-path)
   (pos? (count (get-attribute cm dir-path attr))))
 
+(defn add-metadata
+  [cm dir-path attr value unit]
+  (validate-path-lengths dir-path)
+  (let [ao-obj (if (is-dir? cm dir-path)
+                 (:collectionAO cm)
+                 (:dataObjectAO cm))]
+    (.addAVUMetadata ao-obj dir-path (AvuData/instance attr value unit))))
+
 (defn set-metadata
   [cm dir-path attr value unit]
   "Sets an avu for dir-path."

@@ -10,3 +10,5 @@ bin
 \#*\#
 /target/
 .DS_Store
+.dir-locals.el
+*.eld

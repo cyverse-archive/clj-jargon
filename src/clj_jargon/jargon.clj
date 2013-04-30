@@ -245,6 +245,11 @@
      (println res#)
      res#))
 
+(defn- escape-gen-query-char
+  [c]
+  (cond (= c "\\") "\\\\\\\\"
+        :else      (str "\\\\" c)))
+
 (defn column-xformer
   [col]
   (cond
@@ -252,7 +257,7 @@
    (.getName col)
 
    :else
-   (string/replace col #"'" "\\\\'")))
+   (string/replace col #"['\\\\]" escape-gen-query-char)))
 
 (defn gen-query-col-names
   [cols]

@@ -1255,16 +1255,26 @@
         (.directoryDeleteForce fileSystemAO resource)
         (.fileDeleteForce fileSystemAO resource)))))
 
+(defn log-last
+  [item]
+  (log/warn "process-perms: " item)
+  item)
+
 (defn process-perms
   [f cm path user admin-users]
   (->> (list-user-perms cm path)
-       (remove (comp (conj admin-users user (:username cm)) :user))
-       (map f)
-       (dorun)))
+    (log-last)
+    (remove #(contains? (set (conj admin-users user (:username cm))) (:user %)))
+    (log-last)
+    (map f)
+    (log-last)
+    (dorun)))
 
 (defn process-parent-dirs
   [f process? path]
+  (log/warn "in process-parent-dirs")
   (loop [dir-path (ft/dirname path)]
+    (log/warn "processing path " dir-path)
     (when (process? dir-path)
       (log/warn "processing directory:" dir-path)
       (f dir-path)
@@ -1277,6 +1287,8 @@
 
 (defn contains-accessible-obj?
   [cm user dpath]
+  (log/warn "in contains-accessible-obj? - " user " " dpath)
+  (log/warn "results of list-paths " (list-paths cm dpath))
   (some #(is-readable? cm user %1) (list-paths cm dpath)))
 
 (defn reset-perms

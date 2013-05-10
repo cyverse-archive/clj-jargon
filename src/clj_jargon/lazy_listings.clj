@@ -61,7 +61,7 @@
    the result set."
   [page]
   (let [entry (last page)]
-    (if-not (.isLastResult entry)
+    (if-not (or (empty? page) (.isLastResult entry))
       (.getCount entry)
       0)))
 

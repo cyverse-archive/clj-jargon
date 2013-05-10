@@ -1,6 +1,5 @@
 (ns clj-jargon.lazy-listings
-  (:import [org.irods.jargon.core.exception JargonException]
-           [org.irods.jargon.core.pub.domain SpecificQueryDefinition]))
+  (:require [clj-jargon.spec-query :as sq]))
 
 (def ^:private queries
   {"ilsLACollections"
@@ -22,39 +21,21 @@
         "JOIN r_data_main d ON c.coll_id = d.coll_id  "
         "WHERE c.coll_name = ?  "
         "ORDER BY d.data_name) s "
-        "LEFT OUTER JOIN r_objt_access a ON s.data_id = a.object_id "
-        "LEFT OUTER JOIN r_user_main u ON a.user_id = u.user_id "
+        "JOIN r_objt_access a ON s.data_id = a.object_id "
+        "JOIN r_user_main u ON a.user_id = u.user_id "
         "LIMIT ? "
         "OFFSET ?")})
-
-(defn- get-query-ao
-  "Gets the specific query AO for the current iRODS session."
-  [cm]
-  (.getSpecificQueryAO (:accessObjectFactory cm) (:irodsAccount cm)))
-
-(defn- define-query
-  "Defines a specific query in iRODS. This function ignores exceptions thrown by Jargon because
-   Jargon will throw an exception if the query already exists."
-  [query-ao [alias query]]
-  (try
-    (.addSpecificQuery query-ao (SpecificQueryDefinition. alias query))
-    (catch JargonException _)))
 
 (defn define-specific-queries
   "Defines the specific queries used for data object and collection listings if they're not
    already defined."
-  [irods]
-  (dorun (map (partial define-query (get-query-ao irods)) queries)))
-
-(defn- delete-query
-  "Deletes a specific query in iRODS."
-  [query-ao [alias query]]
-  (.removeSpecificQuery query-ao (SpecificQueryDefinition. alias query)))
+  [cm]
+  (sq/define-specific-queries cm queries))
 
 (defn delete-specific-queries
   "Deletes the specific queries used for data object and collection listings."
-  [irods]
-  (dorun (map (partial delete-query (get-query-ao irods))  queries)))
+  [cm]
+  (sq/delete-specific-queries cm queries))
 
 (defn- get-next-offset
   "Gets the next offset from a page of results, returning zero if the page is the last page in

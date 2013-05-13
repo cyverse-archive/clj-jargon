@@ -999,6 +999,13 @@
                  (:dataObjectAO cm))]
     (.deleteAVUMetadata ao-obj dir-path avu)))
 
+(defn delete-avus
+  [cm dir-path avu-maps]
+  (validate-path-lengths dir-path)
+  (let [ao (if (is-dir? cm dir-path) (:collectionAO cm) (:dataObjectAO cm))] 
+    (doseq [avu-map avu-maps]
+      (.deleteAVUMetadata ao dir-path (map2avu avu-map)))))
+
 (defn- op->constant
   [op]
   (or ({:between         QueryConditionOperators/BETWEEN

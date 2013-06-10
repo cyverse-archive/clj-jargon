@@ -1310,8 +1310,9 @@
 (defn contains-accessible-obj?
   [cm user dpath]
   (log/warn "in contains-accessible-obj? - " user " " dpath)
-  (log/warn "results of list-paths " (list-paths cm dpath))
-  (some #(is-readable? cm user %1) (list-paths cm dpath)))
+  (let [retval (list-paths cm dpath)]
+    (log/warn "results of list-paths " retval)
+    (some #(is-readable? cm user %1) retval)))
 
 (defn reset-perms
   [cm path user admin-users]
@@ -1332,8 +1333,9 @@
    permissions are no longer required for any user who no longer has access to any file or
    subdirectory."
   [cm path user admin-users]
-  (let [parent    (ft/dirname path)
-        base-dirs #{(ft/rm-last-slash (:home cm)) (trash-base-dir cm)}]
+  (let [user-hm   (ft/rm-last-slash (ft/path-join "/" (:zone cm) "home" user))
+        parent    (ft/dirname path)
+        base-dirs #{(ft/rm-last-slash (:home cm)) (trash-base-dir cm) user-hm}]
     (process-perms
      (fn [{sharee :user}]
        (process-parent-dirs

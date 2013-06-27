@@ -1721,7 +1721,7 @@
       (.seek position SEEK-CURRENT)
       (.read buffer)
       (.close))
-    (bytes->string buffer)))
+    (String. buffer)))
 
 (defn overwrite-at-position
   [cm filepath position update]

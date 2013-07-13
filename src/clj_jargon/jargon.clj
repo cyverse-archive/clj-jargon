@@ -117,11 +117,6 @@
                    (:zone cfg)
                    (:defaultResource cfg))))
 
-(defn clean-return
-  [cm retval]
-  (.close (:fileSystem cm))
-  retval)
-
 (defn- context-map
   "Throws:
      org.irods.jargon.core.exception.JargonException - This is thrown when if fails to connect to iRODS"
@@ -1002,7 +997,7 @@
 (defn delete-avus
   [cm dir-path avu-maps]
   (validate-path-lengths dir-path)
-  (let [ao (if (is-dir? cm dir-path) (:collectionAO cm) (:dataObjectAO cm))] 
+  (let [ao (if (is-dir? cm dir-path) (:collectionAO cm) (:dataObjectAO cm))]
     (doseq [avu-map avu-maps]
       (.deleteAVUMetadata ao dir-path (map2avu avu-map)))))
 
@@ -1433,19 +1428,21 @@
 
 (defn proxy-input-stream
   [cm istream]
-  (proxy [java.io.InputStream] []
-    (available [] (.available istream))
-    (mark [readlimit] (.mark istream readlimit))
-    (markSupported [] (.markSupported istream))
-    (read
-      ([] (.read istream))
-      ([b] (.read istream b))
-      ([b off len] (.read istream b off len)))
-    (reset [] (.reset istream))
-    (skip [] (.skip istream))
-    (close []
-      (.close istream)
-      (.close (:fileSystem cm)))))
+  (let [with-jargon-index curr-with-jargon-index]
+    (proxy [java.io.InputStream] []
+      (available [] (.available istream))
+      (mark [readlimit] (.mark istream readlimit))
+      (markSupported [] (.markSupported istream))
+      (read
+        ([] (.read istream))
+        ([b] (.read istream b))
+        ([b off len] (.read istream b off len)))
+      (reset [] (.reset istream))
+      (skip [] (.skip istream))
+      (close []
+        (log/debug with-jargon-index "- closing the proxy input stream")
+        (.close istream)
+        (.close (:fileSystem cm))))))
 
 (defn read-file
   [cm fpath buffer]
@@ -1670,6 +1667,10 @@
   (init-ticket-session cm ticket-id)
   (input-stream cm (.getIrodsAbsolutePath (ticket-by-id cm user ticket-id))))
 
+(defn ticket-proxy-input-stream
+  [cm user ticket-id]
+  (proxy-input-stream cm (ticket-input-stream cm user ticket-id)))
+
 (defn quota-map
   [quota-entry]
   (hash-map
@@ -1734,6 +1735,22 @@
       (.close))
     nil))
 
+(defn clean-return
+  [cm retval]
+  (log/debug curr-with-jargon-index "- cleaning up and returning a plain value")
+  (.close (:fileSystem cm))
+  retval)
+
+(defn dirty-return
+  [cm retval]
+  (log/debug curr-with-jargon-index "- returning without cleaning up...")
+  retval)
+
+(defn proxy-input-stream-return
+  [cm retval]
+  (log/debug curr-with-jargon-index "- returning a proxy input stream...")
+  (proxy-input-stream cm retval))
+
 (defmacro with-jargon
   "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value.
    Next it evaluates the body expressions. Finally, it closes the iRODS connection*. The body
@@ -1743,6 +1760,10 @@
      cfg - The Jargon configuration used to connect to iRODS.
      [cm-sym] - Holds the name of the binding to the iRODS context map used by the body expressions.
      body - Zero or more expressions to be evaluated while an iRODS connection is open.
+
+   Options:
+     Options are named parameters passed to this macro after the context map symbol.
+     :auto-close - true if the connection should be closed automatically (default: true)
 
    Returns:
      It returns the result from evaluating the last expression in the body.*
@@ -1758,21 +1779,23 @@
        (list-all ctx \"/zone/home/user/\"))
 
    * If an IRODSFileInputStream is the result of the last body expression, the iRODS connection is
-     not closed. Instead, a special InputStream is returned than when closed, closes the iRODS
-     connection is well."
-  [cfg [cm-sym] & body]
+     not closed. Instead, a special InputStream is returned that when closed, closes the iRODS
+     connection as well. If the auto-close option is set to false (it's set to true by default)
+     then the connection is not closed automatically. In that case, the caller must take steps to
+     ensure that the connection will be closed (for example, by including a proxy input stream
+     somewhere in the result and calling the close method on that proxy input stream later)."
+  [cfg [cm-sym & {:keys [auto-close] :or {auto-close true}}] & body]
   `(binding [curr-with-jargon-index (dosync (alter with-jargon-index inc))]
      (log/debug "curr-with-jargon-index:" curr-with-jargon-index)
      (when-let [~cm-sym (create-jargon-context-map ~cfg)]
        (ss/try+
-         (let [retval# (do ~@body)]
-           (if (instance? IRODSFileInputStream retval#)
-             (do (log/debug curr-with-jargon-index "- returning a proxy input stream...")
-                 (proxy-input-stream ~cm-sym retval#)) ;The proxied InputStream handles clean up.
-             (do (log/debug curr-with-jargon-index "- cleaning up and returning a plain value")
-                 (clean-return ~cm-sym retval#))))
-         (catch Object o1#
-           (ss/try+
-             (.close (:fileSystem ~cm-sym))
-             (catch Object o2#))
-           (ss/throw+))))))
+        (let [retval# (do ~@body)]
+          (cond
+           (instance? IRODSFileInputStream retval#) (proxy-input-stream-return ~cm-sym retval#)
+           ~auto-close                              (clean-return ~cm-sym retval#)
+           :else                                    (dirty-return ~cm-sym retval#)))
+        (catch Object o1#
+          (ss/try+
+           (.close (:fileSystem ~cm-sym))
+           (catch Object o2#))
+          (ss/throw+))))))

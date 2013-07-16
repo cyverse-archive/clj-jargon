@@ -4,7 +4,8 @@
   (:require [clojure-commons.file-utils :as ft]
             [clojure.tools.logging :as log]
             [clojure.string :as string]
-            [slingshot.slingshot :as ss])
+            [slingshot.slingshot :as ss]
+            [clj-jargon.lazy-listings :as ll])
   (:import [org.irods.jargon.core.exception DataNotFoundException]
            [org.irods.jargon.core.protovalues FilePermissionEnum UserTypeEnum]
            [org.irods.jargon.core.pub.domain
@@ -597,10 +598,10 @@
        initializeObjStatForFile
        getSpecColType)))
 
-(defn user-perms->map
-  [user-perms-obj]
-  (let [enum-val (.getFilePermissionEnum user-perms-obj)]
-    {:user (.getUserName user-perms-obj)
+(defn perm-map
+  [[perm-id username]]
+  (let [enum-val (FilePermissionEnum/valueOf (Integer/parseInt perm-id))]
+    {:user        username
      :permissions {:read  (or (= enum-val read-perm) (= enum-val own-perm))
                    :write (or (= enum-val write-perm) (= enum-val own-perm))
                    :own   (= enum-val own-perm)}}))
@@ -610,12 +611,8 @@
   (let [path' (ft/rm-last-slash abs-path)]
     (validate-path-lengths path')
     (if (is-file? cm path')
-      (mapv
-        user-perms->map
-        (.listPermissionsForDataObject (:dataObjectAO cm) path'))
-      (mapv
-        user-perms->map
-        (.listPermissionsForCollection (:collectionAO cm) path')))))
+      (mapv perm-map (ll/user-dataobject-perms cm path'))
+      (mapv perm-map (ll/user-collection-perms cm path')))))
 
 (defn set-dataobj-perms
   [cm user fpath read? write? own?]

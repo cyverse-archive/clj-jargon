@@ -1,5 +1,6 @@
 (ns clj-jargon.lazy-listings
-  (:require [clj-jargon.spec-query :as sq]))
+  (:require [clj-jargon.spec-query :as sq]
+            [clojure-commons.file-utils :as ft]))
 
 (def ^:private queries
   {"ilsLACollections"
@@ -25,9 +26,9 @@
         "JOIN r_user_main u ON a.user_id = u.user_id "
         "LIMIT ? "
         "OFFSET ?")
-   
+
    "IPCUserCollectionPerms"
-   (str "SELECT a.access_type_id, u.user_id "
+   (str "SELECT a.access_type_id, u.user_name "
         "FROM r_coll_main c "
         "JOIN r_objt_access a ON c.coll_id = a.object_id "
         "JOIN r_user_main u ON a.user_id = u.user_id "
@@ -35,7 +36,24 @@
         "AND c.coll_name = ? "
         "LIMIT ? "
         "OFFSET ? ")
-   
+
+   "IPCUserDataObjectPerms"
+   "SELECT distinct o.access_type_id, u.user_name 
+      FROM r_user_main u,
+           r_data_main d,
+           r_coll_main c,
+           r_tokn_main t,
+           r_objt_access o  
+     WHERE c.coll_name = ?
+       AND d.data_name = ?
+       AND c.coll_id = d.coll_id
+       AND o.object_id = d.data_id
+       AND t.token_namespace = 'access_type'
+       AND u.user_id = o.user_id
+       AND o.access_type_id = t.token_id
+     LIMIT ?
+    OFFSET ?"
+
    "findQueryByAlias"
    (str "SELECT alias, sqlStr FROM r_specific_query WHERE alias = ?")})
 
@@ -49,6 +67,18 @@
   "Deletes the specific queries used for data object and collection listings."
   [cm]
   (sq/delete-specific-queries cm queries))
+
+(defn user-collection-perms
+  "Lists the users and their permissions that have access to a collection."
+  [cm collection]
+  (sq/execute-specific-query
+    cm "IPCUserCollectionPerms" 50000 (ft/dirname collection) collection))
+
+(defn user-dataobject-perms
+  "Lists the user and their permissions that have access to a dataobject."
+  [cm dataobject-path]
+  (sq/execute-specific-query 
+    cm "IPCUserDataObjectPerms" 50000 (ft/dirname dataobject-path) (ft/basename dataobject-path)))
 
 (defn- get-next-offset
   "Gets the next offset from a page of results, returning zero if the page is the last page in

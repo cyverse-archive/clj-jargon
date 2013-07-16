@@ -42,6 +42,13 @@
            (map #(vec (.getColumnsAsList %))))
       (catch DataNotFoundException _ []))))
 
+(defn specific-query?
+  [cm alias]
+  (try
+    (.findSpecificQueryByAlias (get-query-ao cm) alias)
+    true
+    (catch Exception _ false)))
+
 (defn execute-specific-query
   [cm alias page-size & args]
   (letfn [(get-seq [offset]

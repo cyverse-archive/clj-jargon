@@ -24,7 +24,20 @@
         "JOIN r_objt_access a ON s.data_id = a.object_id "
         "JOIN r_user_main u ON a.user_id = u.user_id "
         "LIMIT ? "
-        "OFFSET ?")})
+        "OFFSET ?")
+   
+   "IPCUserCollectionPerms"
+   (str "SELECT a.access_type_id, u.user_id "
+        "FROM r_coll_main c "
+        "JOIN r_objt_access a ON c.coll_id = a.object_id "
+        "JOIN r_user_main u ON a.user_id = u.user_id "
+        "WHERE c.parent_coll_name = ? "
+        "AND c.coll_name = ? "
+        "LIMIT ? "
+        "OFFSET ? ")
+   
+   "findQueryByAlias"
+   (str "SELECT alias, sqlStr FROM r_specific_query WHERE alias = ?")})
 
 (defn define-specific-queries
   "Defines the specific queries used for data object and collection listings if they're not

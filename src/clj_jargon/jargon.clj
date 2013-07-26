@@ -53,6 +53,10 @@
 (def with-jargon-index (ref 0))
 (def ^:dynamic curr-with-jargon-index nil)
 
+(defn log-stack-trace
+  [msg]
+  (log/warn (Exception. "forcing a stack trace") msg))
+
 (def default-proxy-ctor
   "This is the default constructor for creating an iRODS proxy."
   #(IRODSFileSystem/instance))
@@ -643,6 +647,7 @@
      (set-permissions cm user fpath read? write? own? false))
   ([cm user fpath read? write? own? recursive?]
      (validate-path-lengths fpath)
+     (log-stack-trace "from (set-permissions)")
      (cond
       (is-file? cm fpath)
       (set-dataobj-perms cm user fpath read? write? own?)
@@ -1747,10 +1752,6 @@
   [cm retval]
   (log/debug curr-with-jargon-index "- returning a proxy input stream...")
   (proxy-input-stream cm retval))
-
-(defmacro log-stack-trace
-  [msg]
-  `(log/warn (Exception. "forcing a stack trace") ~msg))
 
 (defmacro with-jargon
   "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value.

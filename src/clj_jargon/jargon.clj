@@ -1748,6 +1748,10 @@
   (log/debug curr-with-jargon-index "- returning a proxy input stream...")
   (proxy-input-stream cm retval))
 
+(defn log-stack-trace
+  [msg]
+  (log/warn (Exception. "forcing a stack trace") msg))
+
 (defmacro with-jargon
   "An iRODS connection is opened, binding the connection's context to the symbolic cm-sym value.
    Next it evaluates the body expressions. Finally, it closes the iRODS connection*. The body

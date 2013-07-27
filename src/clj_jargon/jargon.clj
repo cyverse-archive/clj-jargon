@@ -655,6 +655,14 @@
       (is-dir? cm fpath)
       (set-coll-perms cm user fpath read? write? own? recursive?))))
 
+(defn one-user-to-rule-them-all?
+  [cm & users]
+  (let [lister      (:lister cm)
+        subdirs     (.listCollectionsUnderPathWithPermissions lister (:home cm) 0)
+        accessible? (fn [u d] (some #(= (.getUserName %) u) (.getUserFilePermission d)))
+        rules-all?  (fn [u] (every? (partial accessible? u) subdirs))]
+    (some rules-all? users)))
+
 (defn list-paths
   "Returns a list of paths for the entries under the parent path.  This is not
    recursive.  Directories end with /.

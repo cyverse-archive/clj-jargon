@@ -53,9 +53,9 @@
 (def with-jargon-index (ref 0))
 (def ^:dynamic curr-with-jargon-index nil)
 
-(defn log-stack-trace
+(defmacro log-stack-trace
   [msg]
-  (log/warn (Exception. "forcing a stack trace") msg))
+  `(log/warn (Exception. "forcing a stack trace") ~msg))
 
 (def default-proxy-ctor
   "This is the default constructor for creating an iRODS proxy."
@@ -647,7 +647,6 @@
      (set-permissions cm user fpath read? write? own? false))
   ([cm user fpath read? write? own? recursive?]
      (validate-path-lengths fpath)
-     (log-stack-trace "from (set-permissions)")
      (cond
       (is-file? cm fpath)
       (set-dataobj-perms cm user fpath read? write? own?)
@@ -656,12 +655,11 @@
       (set-coll-perms cm user fpath read? write? own? recursive?))))
 
 (defn one-user-to-rule-them-all?
-  [cm & users]
+  [cm user]
   (let [lister      (:lister cm)
         subdirs     (.listCollectionsUnderPathWithPermissions lister (:home cm) 0)
-        accessible? (fn [u d] (some #(= (.getUserName %) u) (.getUserFilePermission d)))
-        rules-all?  (fn [u] (every? (partial accessible? u) subdirs))]
-    (some rules-all? users)))
+        accessible? (fn [u d] (some #(= (.getUserName %) u) (.getUserFilePermission d)))]
+    (every? (partial accessible? user) subdirs)))
 
 (defn list-paths
   "Returns a list of paths for the entries under the parent path.  This is not

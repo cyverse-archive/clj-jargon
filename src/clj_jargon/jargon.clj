@@ -1672,7 +1672,6 @@
 
 (defn ticket-input-stream
   [cm user ticket-id]
-  (init-ticket-session cm ticket-id)
   (input-stream cm (.getIrodsAbsolutePath (ticket-by-id cm user ticket-id))))
 
 (defn ticket-proxy-input-stream

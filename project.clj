@@ -1,4 +1,4 @@
-(defproject org.iplantc/clj-jargon "0.2.8-SNAPSHOT"
+(defproject org.iplantc/clj-jargon "0.2.9-SNAPSHOT"
   :description "Clojure API on top of iRODS's jargon-core."
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [org.iplantc/clojure-commons "1.4.1-SNAPSHOT"]
@@ -13,7 +13,8 @@
                                [org.slf4j/slf4j-log4j12]]]
                  [org.irods.jargon.transfer/jargon-transfer-engine "3.3.2-SNAPSHOT"
                   :exclusions [[org.slf4j/slf4j-api]
-                               [org.slf4j/slf4j-log4j12]]]
+                               [org.slf4j/slf4j-log4j12]
+                               [org.irods.jargon.transfer/jargon-transfer-dao-spring]]]
                  [org.irods.jargon/jargon-security "3.3.2-SNAPSHOT"
                   :exclusions [[org.slf4j/slf4j-api]
                                [org.slf4j/slf4j-log4j12]]]

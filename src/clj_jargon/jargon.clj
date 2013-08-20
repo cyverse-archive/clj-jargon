@@ -1724,7 +1724,9 @@
 (defn read-at-position
   [cm filepath position num-bytes]
   (let [access-file (random-access-file cm filepath)
-        buffer      (byte-array num-bytes)]
+        file-size   (file-length-bytes cm filepath)
+        array-size  (if (< file-size num-bytes) file-size num-bytes)
+        buffer      (byte-array array-size)]
     (doto access-file
       (.seek position SEEK-CURRENT)
       (.read buffer)

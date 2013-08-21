@@ -1725,7 +1725,7 @@
   [cm filepath position num-bytes]
   (let [access-file (random-access-file cm filepath)
         file-size   (file-length-bytes cm filepath)
-        array-size  (if (< file-size num-bytes) file-size num-bytes)
+        array-size  (if (and (not= file-size 0) (< file-size num-bytes)) file-size num-bytes)
         buffer      (byte-array array-size)]
     (doto access-file
       (.seek position SEEK-CURRENT)

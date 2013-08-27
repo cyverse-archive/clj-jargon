@@ -914,7 +914,7 @@
 
 (defn sub-file-maps
   [cm user list-obj]
-  (let [abs-path (.getFormattedAbsolutePath list-obj)]
+  (let [abs-path    (.getFormattedAbsolutePath list-obj)]
     {:id            abs-path
      :label         (ft/basename abs-path)
      :permissions   (dataobject-perm-map cm user abs-path)
@@ -964,11 +964,30 @@
     #(= (:attr %1) attr)
     (get-metadata cm dir-path)))
 
+(defn get-attribute-value
+  [cm apath attr val]
+  (validate-path-lengths apath)
+  (filter
+    #(and (= (:attr %1) attr)
+          (= (:value %1) val))
+    (get-metadata cm apath)))
+
 (defn attribute?
   [cm dir-path attr]
   "Returns true if the path has the associated attribute."
   (validate-path-lengths dir-path)
   (pos? (count (get-attribute cm dir-path attr))))
+
+(defn attr-value?
+  "Returns a truthy value if path has metadata that has an attribute of attr and
+   a value of val."
+  [cm path attr val]
+  (-> (filter
+        #(and (= (:attr %1) attr)
+              (= (:value %1) val))
+        (get-metadata cm path))
+    count
+    pos?))
 
 (defn add-metadata
   [cm dir-path attr value unit]
@@ -991,23 +1010,29 @@
       (let [old-avu (map2avu (first (get-attribute cm dir-path attr)))]
         (.modifyAVUMetadata ao-obj dir-path old-avu avu)))))
 
-(defn delete-metadata
-  [cm dir-path attr]
-  "Deletes an avu from dir-path."
+(defn- delete-meta
+  [cm dir-path attr-func]
   (validate-path-lengths dir-path)
-  (let [fattr  (first (get-attribute cm dir-path attr))
+  (let [fattr  (first (attr-func))
         avu    (map2avu fattr)
         ao-obj (if (is-dir? cm dir-path)
                  (:collectionAO cm)
-                 (:dataObjectAO cm))]
+                   (:dataObjectAO cm))]
     (.deleteAVUMetadata ao-obj dir-path avu)))
+
+(defn delete-metadata
+  ([cm dir-path attr]
+    (delete-meta cm dir-path #(get-attribute cm dir-path attr)))
+  ([cm dir-path attr val]
+    (delete-meta cm dir-path #(get-attribute-value cm dir-path attr val))))
 
 (defn delete-avus
   [cm dir-path avu-maps]
   (validate-path-lengths dir-path)
   (let [ao (if (is-dir? cm dir-path) (:collectionAO cm) (:dataObjectAO cm))]
     (doseq [avu-map avu-maps]
-      (.deleteAVUMetadata ao dir-path (map2avu avu-map)))))
+      (when (attr-value? cm dir-path (:attr avu-map) (:value avu-map))
+        (.deleteAVUMetadata ao dir-path (map2avu avu-map))))))
 
 (defn- op->constant
   [op]
@@ -1044,6 +1069,15 @@
                                     (op->constant op) value)
       (.exportIRODSQueryFromBuilder 50000)))
 
+(defn- build-file-attr-query
+  [name]
+  (-> (IRODSGenQueryBuilder. true nil)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_COLL_NAME)
+      (.addSelectAsGenQueryValue RodsGenQueryEnum/COL_DATA_NAME)
+      (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_NAME
+                                    QueryConditionOperators/EQUAL name)
+      (.exportIRODSQueryFromBuilder 50000)))
+
 (defn build-query-for-avu-by-obj
   [file-path attr op value]
   (-> (IRODSGenQueryBuilder. true nil)
@@ -1057,6 +1091,12 @@
       (.addConditionAsGenQueryField RodsGenQueryEnum/COL_META_DATA_ATTR_VALUE
                                     (op->constant op) value)
       (.exportIRODSQueryFromBuilder 50000)))
+
+(defn list-files-with-attr
+  [cm attr]
+  (let [query (build-file-attr-query attr)
+        rs    (.executeIRODSQueryAndCloseResult (:executor cm) query 0)]
+    (map #(string/join "/" (.getColumnsAsList %)) (.getResults rs))))
 
 (defn list-files-with-avu
   [cm name op value]

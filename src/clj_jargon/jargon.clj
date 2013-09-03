@@ -26,7 +26,8 @@
             RodsGenQueryEnum
             AVUQueryElement
             AVUQueryElement$AVUQueryPart
-            AVUQueryOperatorEnum]
+            AVUQueryOperatorEnum
+            CollectionAndDataObjectListingEntry$ObjectType]
            [org.irods.jargon.datautils.datacache
             DataCacheServiceFactoryImpl]
            [org.irods.jargon.datautils.shoppingcart
@@ -48,6 +49,9 @@
 (def write-perm FilePermissionEnum/WRITE)
 (def own-perm FilePermissionEnum/OWN)
 (def none-perm FilePermissionEnum/NONE)
+
+(def collection-type CollectionAndDataObjectListingEntry$ObjectType/COLLECTION)
+(def dataobject-type CollectionAndDataObjectListingEntry$ObjectType/DATA_OBJECT)
 
 ; Debuging code.
 (def with-jargon-index (ref 0))
@@ -569,19 +573,21 @@
   (doseq [p paths] (validate-path-lengths p))
   (zero? (count (filter #(not (exists? cm %)) paths))))
 
+(defn jargon-type-check
+  [cm check-type path]
+  (= check-type (.getObjectType (.getObjStat (:fileSystemAO cm) path))))
+
 (defn is-file?
   [cm path]
   "Returns true if the path is a file in iRODS, false otherwise."
   (validate-path-lengths path)
-  (.isFile (.instanceIRODSFile (:fileFactory cm) path)))
+  (jargon-type-check cm dataobject-type path))
 
 (defn is-dir?
   [cm path]
   "Returns true if the path is a directory in iRODS, false otherwise."
   (validate-path-lengths path)
-  (let [ff (:fileFactory cm)
-        fixed-path (ft/rm-last-slash path)]
-    (.isDirectory (.instanceIRODSFile ff fixed-path))))
+  (jargon-type-check cm collection-type path))
 
 (defn is-linked-dir?
   [cm path]

@@ -663,7 +663,7 @@
 (defn one-user-to-rule-them-all?
   [cm user]
   (let [lister      (:lister cm)
-        subdirs     (.listCollectionsUnderPathWithPermissions lister (:home cm) 0)
+        subdirs     (.listCollectionsUnderPathWithPermissions lister (ft/rm-last-slash (:home cm)) 0)
         accessible? (fn [u d] (some #(= (.getUserName %) u) (.getUserFilePermission d)))]
     (every? (partial accessible? user) subdirs)))
 

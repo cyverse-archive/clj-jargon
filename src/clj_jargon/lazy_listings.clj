@@ -175,8 +175,8 @@
   [cm dir-path]
   (lazy-listing #(.listDataObjectsUnderPathWithPermissions (:lister cm) dir-path %)))
 
-(defn list-entries-in-dir
+(defn paged-list-entries
   "Returns a paged directory listing."
-  [cm user dir-path]
-  (sq/execute-specific-query cm "IPCDataObjectsAndCollections" 5 user dir-path))
+  [cm user dir-path limit offset]
+  (sq/paged-query cm "IPCDataObjectsAndCollections" limit offset user dir-path))
 

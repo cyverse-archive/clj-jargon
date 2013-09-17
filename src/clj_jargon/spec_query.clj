@@ -49,6 +49,11 @@
     true
     (catch Exception _ false)))
 
+(defn paged-query
+  [cm alias limit offset & args]
+  (let [page (get-specific-query-page cm alias offset limit args)]
+    (if (seq page) page [])))
+
 (defn execute-specific-query
   [cm alias page-size & args]
   (letfn [(get-seq [offset]

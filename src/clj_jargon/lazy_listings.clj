@@ -2,36 +2,6 @@
   (:require [clj-jargon.spec-query :as sq]
             [clojure-commons.file-utils :as ft]))
 
-
-;   "SELECT u.dir_name, u.base_name, u.create_ts, u.modify_ts, u.access_type_id
-;      FROM ( 
-;          SELECT s.coll_name as dir_name, 
-;                 s.data_name as base_name, 
-;                 s.create_ts as create_ts, 
-;                 s.modify_ts as modify_ts, 
-;                 a.access_type_id as access_type_id
-;            FROM (
-;                SELECT c.coll_name, d.data_name, d.create_ts, d.modify_ts, d.data_size, d.data_id
-;                  FROM r_coll_main c
-;                  JOIN r_data_main d ON c.coll_id = d.coll_id
-;                 WHERE c.coll_name = ?
-;              ORDER BY d.data_name) s
-;            JOIN r_objt_access a ON s.data_id = a.object_id
-;            JOIN r_user_main u ON a.user_id = u.user_id
-;           UNION
-;          SELECT c.parent_coll_name as dir_name, 
-;                 c.coll_name as base_name, 
-;                 c.create_ts as create_ts, 
-;                 c.modify_ts as modify_ts, 
-;                 a.access_type_id as access_type_id
-;            FROM r_coll_main c 
-;            JOIN r_objt_access a ON c.coll_id = a.object_id
-;            JOIN r_user_main u ON a.user_id = u.user_id
-;           WHERE c.parent_coll_name = ? ) u
-;  ORDER BY u.dir_name, u.base_name
-;     LIMIT ?
-;    OFFSET ?"
-
 (def ^:private queries
   {"ilsLACollections"
    (str "SELECT c.parent_coll_name, c.coll_name, c.create_ts, c.modify_ts, c.coll_id, "
@@ -119,6 +89,39 @@
   ORDER BY p.full_path
      LIMIT ?
     OFFSET ?"
+   
+   "IPCCountDataObjectsAndCollections"
+   "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ?),
+         parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
+    SELECT p.full_path, p.create_ts, p.modify_ts, p.access_type_id, p.type
+      FROM ( SELECT c.coll_name      as dir_name,
+                    d.data_name      as full_path, 
+                    d.create_ts      as create_ts, 
+                    d.modify_ts      as modify_ts,
+                    'dataobject'     as type,
+                    a.access_type_id as access_type_id
+               FROM r_data_main d
+               JOIN r_coll_main c ON c.coll_id = d.coll_id 
+               JOIN r_objt_access a ON d.data_id = a.object_id
+               JOIN r_user_main u ON a.user_id = u.user_id,
+                    user_lookup,
+                    parent
+              WHERE u.user_id = user_lookup.user_id
+                AND c.coll_id = parent.coll_id
+              UNION
+             SELECT c.parent_coll_name as dir_name,
+                    c.coll_name        as full_path, 
+                    c.create_ts        as create_ts, 
+                    c.modify_ts        as modify_ts,
+                    'collection'       as type, 
+                    a.access_type_id   as access_type_id
+               FROM r_coll_main c 
+               JOIN r_objt_access a ON c.coll_id = a.object_id
+               JOIN r_user_main u ON a.user_id = u.user_id,
+                    user_lookup,
+                    parent
+              WHERE u.user_id = user_lookup.user_id
+                AND c.parent_coll_name = parent.coll_name) AS p"
 
    "findQueryByAlias"
    (str "SELECT alias, sqlStr FROM r_specific_query WHERE alias = ?")})
@@ -181,4 +184,9 @@
   "Returns a paged directory listing."
   [cm user dir-path limit offset]
   (sq/paged-query cm "IPCDataObjectsAndCollections" limit offset user dir-path))
+
+(defn count-list-entries
+  "Returns the number of entries in a directory listing. Useful for paging."
+  [cm user dir-path]
+  (sq/get-specific-query-results cm "IPCCountDataObjectsAndCollections" user dir-path))
 

@@ -42,6 +42,16 @@
            (map #(vec (.getColumnsAsList %))))
       (catch DataNotFoundException _ []))))
 
+(defn get-specific-query-results
+  [cm alias & args]
+  (let [query-ao (get-query-ao cm)
+        args     (vec (or args []))
+        query (SpecificQuery/instanceArguments alias args 0 "")]
+    (try
+      (->> (.executeSpecificQueryUsingAlias query-ao query 0)
+        (.getResults))
+      (catch DataNotFoundException _ []))))
+
 (defn specific-query?
   [cm alias]
   (try

@@ -31,26 +31,27 @@
   [cm queries]
   (dorun (map (partial delete-query (get-query-ao cm))  queries)))
 
+(defn query-specifically
+  [cm query-ao query-inst limit]
+  (try
+    (->> (.executeSpecificQueryUsingAlias query-ao query-inst limit)
+      (.getResults)
+      (map #(vec (.getColumnsAsList %))))
+    (catch DataNotFoundException _ [])))
+
 (defn- get-specific-query-page
   [cm alias offset limit args]
   (let [query-ao  (get-query-ao cm)
         args      (conj (vec (or args [])) (str limit) (str offset))
         query     (SpecificQuery/instanceArguments alias args 0 "")]
-    (try
-      (->> (.executeSpecificQueryUsingAlias query-ao query limit)
-           (.getResults)
-           (map #(vec (.getColumnsAsList %))))
-      (catch DataNotFoundException _ []))))
+    (query-specifically cm query-ao query limit)))
 
 (defn get-specific-query-results
   [cm alias & args]
   (let [query-ao (get-query-ao cm)
         args     (vec (or args []))
         query (SpecificQuery/instanceArguments alias args 0 "")]
-    (try
-      (->> (.executeSpecificQueryUsingAlias query-ao query 0)
-        (.getResults))
-      (catch DataNotFoundException _ []))))
+    (query-specifically cm query-ao query 1000000)))
 
 (defn specific-query?
   [cm alias]

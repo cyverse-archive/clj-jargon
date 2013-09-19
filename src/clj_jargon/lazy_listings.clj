@@ -93,7 +93,7 @@
    "IPCCountDataObjectsAndCollections"
    "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ?),
          parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
-    SELECT p.full_path, p.create_ts, p.modify_ts, p.access_type_id, p.type
+    SELECT COUNT(p.*)
       FROM ( SELECT c.coll_name      as dir_name,
                     d.data_name      as full_path, 
                     d.create_ts      as create_ts, 
@@ -188,5 +188,8 @@
 (defn count-list-entries
   "Returns the number of entries in a directory listing. Useful for paging."
   [cm user dir-path]
-  (sq/get-specific-query-results cm "IPCCountDataObjectsAndCollections" user dir-path))
+  (-> (sq/get-specific-query-results cm "IPCCountDataObjectsAndCollections" user dir-path)
+    (first)
+    (first)
+    (Integer/parseInt)))
 

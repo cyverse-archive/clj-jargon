@@ -2,6 +2,50 @@
   (:require [clj-jargon.spec-query :as sq]
             [clojure-commons.file-utils :as ft]))
 
+(def listing-query-tmpl
+   "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ?),
+         parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
+    SELECT p.full_path, p.base_name, p.data_size, p.create_ts, p.modify_ts, p.access_type_id, p.type
+      FROM ( SELECT c.coll_name      as dir_name,
+                    d.data_path      as full_path,
+                    d.data_name      as base_name,
+                    d.create_ts      as create_ts, 
+                    d.modify_ts      as modify_ts,
+                    'dataobject'     as type,
+                    d.data_size      as data_size,
+                    a.access_type_id as access_type_id
+               FROM r_data_main d
+               JOIN r_coll_main c ON c.coll_id = d.coll_id 
+               JOIN r_objt_access a ON d.data_id = a.object_id
+               JOIN r_user_main u ON a.user_id = u.user_id,
+                    user_lookup,
+                    parent
+              WHERE u.user_id = user_lookup.user_id
+                AND c.coll_id = parent.coll_id
+              UNION
+             SELECT c.parent_coll_name as dir_name,
+                    c.coll_name        as full_path,
+                    regexp_replace(c.coll_name, '.*/', '') as base_name,
+                    c.create_ts        as create_ts, 
+                    c.modify_ts        as modify_ts,
+                    'collection'       as type,
+                    0                  as data_size,
+                    a.access_type_id   as access_type_id
+               FROM r_coll_main c 
+               JOIN r_objt_access a ON c.coll_id = a.object_id
+               JOIN r_user_main u ON a.user_id = u.user_id,
+                    user_lookup,
+                    parent
+              WHERE u.user_id = user_lookup.user_id
+                AND c.parent_coll_name = parent.coll_name) AS p
+    ORDER BY p.type ASC, %s %s
+       LIMIT ?
+      OFFSET ?")
+
+(defn listing-query
+  [sort-col sort-order]
+  (format listing-query-tmpl sort-col sort-order))
+
 (def ^:private queries
   {"ilsLACollections"
    (str "SELECT c.parent_coll_name, c.coll_name, c.create_ts, c.modify_ts, c.coll_id, "
@@ -54,44 +98,38 @@
      LIMIT ?
     OFFSET ?"
    
-   "IPCDataObjectsAndCollections"
-   "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ?),
-         parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
-    SELECT p.full_path, p.create_ts, p.modify_ts, p.access_type_id, p.type
-      FROM ( SELECT c.coll_name      as dir_name,
-                    d.data_name      as full_path, 
-                    d.create_ts      as create_ts, 
-                    d.modify_ts      as modify_ts,
-                    'dataobject'     as type,
-                    a.access_type_id as access_type_id
-               FROM r_data_main d
-               JOIN r_coll_main c ON c.coll_id = d.coll_id 
-               JOIN r_objt_access a ON d.data_id = a.object_id
-               JOIN r_user_main u ON a.user_id = u.user_id,
-                    user_lookup,
-                    parent
-              WHERE u.user_id = user_lookup.user_id
-                AND c.coll_id = parent.coll_id
-              UNION
-             SELECT c.parent_coll_name as dir_name,
-                    c.coll_name        as full_path, 
-                    c.create_ts        as create_ts, 
-                    c.modify_ts        as modify_ts,
-                    'collection'       as type, 
-                    a.access_type_id   as access_type_id
-               FROM r_coll_main c 
-               JOIN r_objt_access a ON c.coll_id = a.object_id
-               JOIN r_user_main u ON a.user_id = u.user_id,
-                    user_lookup,
-                    parent
-              WHERE u.user_id = user_lookup.user_id
-                AND c.parent_coll_name = parent.coll_name) AS p
-  ORDER BY p.full_path
-     LIMIT ?
-    OFFSET ?"
+   "IPCEntryListingPathSortASC"
+   (listing-query "p.full_path" "ASC")
+   
+   "IPCEntryListingPathSortDESC"
+   (listing-query "p.full_path" "DESC")
+   
+   "IPCEntryListingNameSortASC"
+   (listing-query "p.base_name" "ASC")
+   
+   "IPCEntryListingNameSortDESC"
+   (listing-query "p.base_name" "DESC")
+   
+   "IPCEntryListingLastModSortASC"
+   (listing-query "p.modify_ts" "ASC")
+   
+   "IPCEntryListingLastModSortDESC"
+   (listing-query "p.modify_ts" "DESC")
+   
+   "IPCEntryListingSizeSortASC"
+   (listing-query "p.data_size" "ASC")
+   
+   "IPCEntryListingSizeSortDESC"
+   (listing-query "p.data_size" "DESC")
+   
+   "IPCEntryListingCreatedSortASC"
+   (listing-query "p.create_ts" "ASC")
+   
+   "IPCEntryListingCreatedSortDESC"
+   (listing-query "p.create_ts" "DESC")
    
    "IPCCountDataObjectsAndCollections"
-   "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ?),
+   "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ? ),
          parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
     SELECT COUNT(p.*)
       FROM ( SELECT c.coll_name      as dir_name,
@@ -182,8 +220,40 @@
 
 (defn paged-list-entries
   "Returns a paged directory listing."
-  [cm user dir-path limit offset]
-  (sq/paged-query cm "IPCDataObjectsAndCollections" limit offset user dir-path))
+  [cm user dir-path sort-col sort-order limit offset]
+  (cond
+    (and (= sort-col "PATH") (= sort-order "ASC"))
+    (sq/paged-query cm "IPCEntryListingPathSortASC" limit offset user dir-path)
+    
+    (and (= sort-col "PATH") (= sort-order "DESC"))
+    (sq/paged-query cm "IPCEntryListingPathSortDESC" limit offset user dir-path)
+    
+    (and (= sort-col "NAME") (= sort-order "ASC"))
+    (sq/paged-query cm "IPCEntryListingNameSortASC" limit offset user dir-path)
+    
+    (and (= sort-col "NAME") (= sort-order "DESC"))
+    (sq/paged-query cm "IPCEntryListingNameSortDESC" limit offset user dir-path)
+    
+    (and (= sort-col "SIZE") (= sort-order "ASC"))
+    (sq/paged-query cm "IPCEntryListingSizeSortASC" limit offset user dir-path)
+    
+    (and (= sort-col "SIZE") (= sort-order "DESC"))
+    (sq/paged-query cm "IPCEntryListingSizeSortDESC" limit offset user dir-path)
+    
+    (and (= sort-col "CREATED") (= sort-order "ASC"))
+    (sq/paged-query cm "IPCEntryListingCreatedSortASC" limit offset user dir-path)
+    
+    (and (= sort-col "CREATED") (= sort-order "DESC"))
+    (sq/paged-query cm "IPCEntryListingCreatedSortDESC" limit offset user dir-path)
+    
+    (and (= sort-col "LASTMOD") (= sort-order "ASC"))
+    (sq/paged-query cm "IPCEntryListingLastModSortASC" limit offset user dir-path)
+    
+    (and (= sort-col "LASTMOD") (= sort-order "DESC"))
+    (sq/paged-query cm "IPCEntryListingLastModSortDESC" limit offset user dir-path)
+    
+    :else
+    (sq/paged-query cm "IPCEntryListingNameSortASC" limit offset user dir-path)))
 
 (defn count-list-entries
   "Returns the number of entries in a directory listing. Useful for paging."

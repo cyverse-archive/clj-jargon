@@ -432,12 +432,19 @@
     RodsGenQueryEnum/COL_COLL_ACCESS_USER_NAME
     user]))
 
+(defn- dir-list-sort
+  [one two]
+  (> (Integer/parseInt (last one)) 
+     (Integer/parseInt (last two))))
+
 (defn list-dir
   [cm user coll-path & {:keys [include-files include-subdirs]
                         :or   {include-files   false
                                include-subdirs true}}]
   (let [coll-path (ft/rm-last-slash coll-path)
-        listing   (first (map (comp format-dir result-row->vec) (list-dir-rs cm user coll-path)))]
+        vec-res   (sort dir-list-sort (mapv result-row->vec (list-dir-rs cm user coll-path)))
+        results   (map format-dir vec-res)
+        listing   (first results)]
     (when-not (nil? listing)
       (reduce (fn [listing [_ k f]] (assoc listing k (f cm user coll-path)))
               listing

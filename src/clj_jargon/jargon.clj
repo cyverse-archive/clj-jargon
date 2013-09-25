@@ -676,7 +676,7 @@
 
 (defn list-paths
   "Returns a list of paths for the entries under the parent path.  This is not
-   recursive.  Directories end with /.
+   recursive .
 
    Parameters:
      cm - The context map
@@ -696,10 +696,7 @@
   (validate-path-lengths parent-path)
   (mapv
     #(try+
-       (let [full-path (ft/path-join parent-path %1)]
-         (if (is-dir? cm full-path)
-           (ft/add-trailing-slash full-path)
-           full-path))
+       (ft/path-join parent-path %1)
        (catch Object _
          (when-not (contains? (set flags) :ignore-child-exns) (throw+))))
     (.getListInDir (:fileSystemAO cm) (file cm parent-path))))

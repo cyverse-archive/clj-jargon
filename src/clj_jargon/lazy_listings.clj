@@ -163,10 +163,7 @@
                     user_lookup,
                     parent
               WHERE u.user_id = user_lookup.user_id
-                AND c.parent_coll_name = parent.coll_name) AS p
-    ORDER BY p.type ASC, %s %s
-       LIMIT ?
-      OFFSET ?"
+                AND c.parent_coll_name = parent.coll_name) AS p"
 
    "findQueryByAlias"
    (str "SELECT alias, sqlStr FROM r_specific_query WHERE alias = ?")})

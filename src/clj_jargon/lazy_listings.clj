@@ -7,7 +7,7 @@
          parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
     SELECT p.full_path, p.base_name, p.data_size, p.create_ts, p.modify_ts, p.access_type_id, p.type
       FROM ( SELECT c.coll_name      as dir_name,
-                    d.data_path      as full_path,
+                    c.coll_name || '/' || d.data_name as full_path,
                     d.data_name      as base_name,
                     d.create_ts      as create_ts, 
                     d.modify_ts      as modify_ts,
@@ -37,7 +37,7 @@
                     user_lookup,
                     parent
               WHERE u.user_id = user_lookup.user_id
-                AND c.parent_coll_name = parent.coll_name) AS p
+                AND c.parent_coll_name = parent.coll_name ) AS p
     ORDER BY p.type ASC, %s %s
        LIMIT ?
       OFFSET ?")

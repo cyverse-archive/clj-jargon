@@ -244,16 +244,16 @@
     (and (= sort-col "SIZE") (= sort-order "DESC"))
     (sq/paged-query cm "IPCEntryListingSizeSortDESC" limit offset user dir-path)
     
-    (and (= sort-col "CREATED") (= sort-order "ASC"))
+    (and (= sort-col "DATESUBMITTED") (= sort-order "ASC"))
     (sq/paged-query cm "IPCEntryListingCreatedSortASC" limit offset user dir-path)
     
-    (and (= sort-col "CREATED") (= sort-order "DESC"))
+    (and (= sort-col "DATESUBMITTED") (= sort-order "DESC"))
     (sq/paged-query cm "IPCEntryListingCreatedSortDESC" limit offset user dir-path)
     
-    (and (= sort-col "LASTMOD") (= sort-order "ASC"))
+    (and (= sort-col "LASTMODIFIED") (= sort-order "ASC"))
     (sq/paged-query cm "IPCEntryListingLastModSortASC" limit offset user dir-path)
     
-    (and (= sort-col "LASTMOD") (= sort-order "DESC"))
+    (and (= sort-col "LASTMODIFIED") (= sort-order "DESC"))
     (sq/paged-query cm "IPCEntryListingLastModSortDESC" limit offset user dir-path)
     
     :else

@@ -226,10 +226,10 @@
   "Returns a paged directory listing."
   [cm user dir-path sort-col sort-order limit offset]
   (cond
-    (and (= sort-col "PATH") (= sort-order "ASC"))
+    (and (= sort-col "ID") (= sort-order "ASC"))
     (sq/paged-query cm "IPCEntryListingPathSortASC" limit offset user dir-path)
     
-    (and (= sort-col "PATH") (= sort-order "DESC"))
+    (and (= sort-col "ID") (= sort-order "DESC"))
     (sq/paged-query cm "IPCEntryListingPathSortDESC" limit offset user dir-path)
     
     (and (= sort-col "NAME") (= sort-order "ASC"))

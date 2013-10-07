@@ -244,10 +244,10 @@
     (and (= sort-col "SIZE") (= sort-order "DESC"))
     (sq/paged-query cm "IPCEntryListingSizeSortDESC" limit offset user dir-path)
     
-    (and (= sort-col "DATESUBMITTED") (= sort-order "ASC"))
+    (and (= sort-col "DATECREATED") (= sort-order "ASC"))
     (sq/paged-query cm "IPCEntryListingCreatedSortASC" limit offset user dir-path)
     
-    (and (= sort-col "DATESUBMITTED") (= sort-order "DESC"))
+    (and (= sort-col "DATECREATED") (= sort-order "DESC"))
     (sq/paged-query cm "IPCEntryListingCreatedSortDESC" limit offset user dir-path)
     
     (and (= sort-col "LASTMODIFIED") (= sort-order "ASC"))

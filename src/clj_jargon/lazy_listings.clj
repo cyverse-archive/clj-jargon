@@ -166,6 +166,32 @@
               WHERE u.user_id = user_lookup.user_id
                 AND c.parent_coll_name = parent.coll_name
                 AND c.coll_type != 'linkPoint') AS p"
+   
+   "IPCCountDataObjectsUnderPath"
+   "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ?),
+         parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
+    SELECT COUNT(*)
+      FROM r_data_main d
+      JOIN r_coll_main c ON c.coll_id = d.coll_id 
+      JOIN r_objt_access a ON d.data_id = a.object_id
+      JOIN r_user_main u ON a.user_id = u.user_id,
+           user_lookup,
+           parent
+     WHERE u.user_id = user_lookup.user_id
+       AND c.coll_id = parent.coll_id"
+   
+   "IPCCountCollectionsUnderPath"
+   "WITH user_lookup AS ( SELECT u.user_id as user_id FROM r_user_main u WHERE u.user_name = ?),
+         parent AS ( SELECT c.coll_id as coll_id, c.coll_name as coll_name FROM r_coll_main c WHERE c.coll_name = ? )
+    SELECT COUNT(*)
+      FROM r_coll_main c
+      JOIN r_objt_access a ON c.coll_id = a.object_id
+      JOIN r_user_main u ON a.user_id = u.user_id,
+           user_lookup,
+           parent
+     WHERE u.user_id = user_lookup.user_id
+       AND c.parent_coll_name = parent.coll_name
+       AND c.coll_type != 'linkPoint'"
 
    "findQueryByAlias"
    (str "SELECT alias, sqlStr FROM r_specific_query WHERE alias = ?")})
@@ -265,6 +291,24 @@
   "Returns the number of entries in a directory listing. Useful for paging."
   [cm user dir-path]
   (-> (sq/get-specific-query-results cm "IPCCountDataObjectsAndCollections" user dir-path)
+    (first)
+    (first)
+    (Integer/parseInt)))
+
+(defn num-collections-under-path
+  "The number of collections directly under the specified path. In other words, 
+   it's not recursive."
+  [cm user dir-path]
+  (-> (sq/get-specific-query-results cm "IPCCountCollectionsUnderPath" user dir-path)
+    (first)
+    (first)
+    (Integer/parseInt)))
+
+(defn num-dataobjects-under-path
+  "The number of collections directly under the specified path. In other words, 
+   it's not recursive."
+  [cm user dir-path]
+  (-> (sq/get-specific-query-results cm "IPCCountDataObjectsUnderPath" user dir-path)
     (first)
     (first)
     (Integer/parseInt)))

@@ -1683,6 +1683,7 @@
 (defn ticket-obj->map
   [ticket]
   {:ticket-id        (.getTicketString ticket)
+   :path         (.getIrodsAbsolutePath ticket)
    :byte-write-limit (str (.getWriteByteLimit ticket))
    :byte-write-count (str (.getWriteByteCount ticket))
    :uses-limit       (str (.getUsesLimit ticket))

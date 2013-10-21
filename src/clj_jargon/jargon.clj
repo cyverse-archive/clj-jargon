@@ -500,14 +500,16 @@
   [cm user data-path]
   (validate-path-lengths data-path)
   (or (dataobject-perm? cm user data-path read-perm)
-      (dataobject-perm? cm user data-path write-perm)))
+      (dataobject-perm? cm user data-path write-perm)
+      (dataobject-perm? cm user data-path own-perm)))
 
 (defn dataobject-writeable?
   "Checks to see if the user has write permissions on data-path. Only
    works for dataobjects."
   [cm user data-path]
   (validate-path-lengths data-path)
-  (dataobject-perm? cm user data-path write-perm))
+  (or (dataobject-perm? cm user data-path write-perm)
+      (dataobject-perm? cm user data-path own-perm)))
 
 (defn owns-dataobject?
   "Checks to see if the user has ownership permissions on data-path. Only
@@ -530,14 +532,16 @@
   [cm user coll-path]
   (validate-path-lengths coll-path)
   (or (collection-perm? cm user coll-path read-perm)
-      (collection-perm? cm user coll-path write-perm)))
+      (collection-perm? cm user coll-path write-perm)
+      (collection-perm? cm user coll-path own-perm)))
 
 (defn collection-writeable?
   "Checks to see if the suer has write permissions on coll-path. Only
    works for collection paths."
   [cm user coll-path]
   (validate-path-lengths coll-path)
-  (collection-perm? cm user coll-path write-perm))
+  (or (collection-perm? cm user coll-path write-perm)
+      (collection-perm? cm user coll-path own-perm)))
 
 (defn owns-collection?
   "Checks to see if the user has ownership permissions on coll-path. Only

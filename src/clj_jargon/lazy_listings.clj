@@ -310,7 +310,7 @@
 (defn list-collections-under-path
   "Lists all of the collections under a path."
   [cm user dir-path]
-  (-> (sq/get-specific-query-results cm "IPCListCollectionsUnderPath" user dir-path)))
+  (sq/get-specific-query-results cm "IPCListCollectionsUnderPath" user dir-path))
 
 (defn count-list-entries
   "Returns the number of entries in a directory listing. Useful for paging."

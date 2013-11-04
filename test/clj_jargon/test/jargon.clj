@@ -1,6 +1,8 @@
 (ns clj-jargon.test.jargon
-  (:use clojure.test
-        clj-jargon.jargon)
+  (:use [clojure.test]
+        [clj-jargon.init]
+        [clj-jargon.item-info]
+        [clj-jargon.item-ops])
   (:require [slingshot.slingshot :as ss]
             [boxy.core :as boxy]
             [boxy.jargon-if :as irods])

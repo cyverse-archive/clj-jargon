@@ -1,5 +1,5 @@
 (ns clj-jargon.jargon
-  (:use clojure-commons.error-codes
+  (:use [clojure-commons.error-codes]
         [slingshot.slingshot :only [try+ throw+]])
   (:require [clojure-commons.file-utils :as ft]
             [clojure.tools.logging :as log]

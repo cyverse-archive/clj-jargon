@@ -1,7 +1,7 @@
-(defproject org.iplantc/clj-jargon "0.3.0-SNAPSHOT"
+(defproject org.iplantc/clj-jargon "0.3.1"
   :description "Clojure API on top of iRODS's jargon-core."
   :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.iplantc/clojure-commons "1.4.1-SNAPSHOT"]
+                 [org.iplantc/clojure-commons "1.4.7"]
                  [org.slf4j/slf4j-api "1.7.5"]
                  [org.slf4j/slf4j-log4j12 "1.7.5"]
                  [org.irods.jargon/jargon-core "3.3.1.1"

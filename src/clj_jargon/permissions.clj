@@ -355,7 +355,7 @@
   (let [{curr-write :write curr-own :own} (permissions cm username path)]
     (set-permissions cm username path readable? curr-write curr-own)))
 
-(defn- list-paths
+(defn list-paths
   "Returns a list of paths for the entries under the parent path.  This is not
    recursive .
 

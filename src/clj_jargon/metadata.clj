@@ -1,5 +1,7 @@
 (ns clj-jargon.metadata
-  (:use [clj-jargon.validations])
+  (:use [clj-jargon.validations]
+        [clj-jargon.item-info :only [is-dir?]])
+  (:require [clojure.string :as string])
   (:import [org.irods.jargon.core.pub.domain AvuData]
            [org.irods.jargon.core.query IRODSGenQueryBuilder]
            [org.irods.jargon.core.query QueryConditionOperators]

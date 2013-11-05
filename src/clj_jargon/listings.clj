@@ -2,8 +2,10 @@
   (:use [clj-jargon.validations]
         [clj-jargon.gen-query]
         [clj-jargon.permissions]
+        [clj-jargon.users :only [user-groups username->id]]
         [slingshot.slingshot :only [try+ throw+]])
-  (:require [clojure-commons.file-utils :as ft])
+  (:require [clojure-commons.file-utils :as ft]
+            [clojure.string :as string])
   (:import [org.irods.jargon.core.query RodsGenQueryEnum]))
 
 (defn list-subdirs-rs

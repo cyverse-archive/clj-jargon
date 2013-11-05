@@ -77,24 +77,6 @@
   (validate-path-lengths input-path)
   (.instanceIRODSFileInputStream (:fileFactory cm) (file cm input-path)))
 
-(defn proxy-input-stream
-  [cm istream]
-  (let [with-jargon-index curr-with-jargon-index]
-    (proxy [java.io.InputStream] []
-      (available [] (.available istream))
-      (mark [readlimit] (.mark istream readlimit))
-      (markSupported [] (.markSupported istream))
-      (read
-        ([] (.read istream))
-        ([b] (.read istream b))
-        ([b off len] (.read istream b off len)))
-      (reset [] (.reset istream))
-      (skip [] (.skip istream))
-      (close []
-        (log/debug with-jargon-index "- closing the proxy input stream")
-        (.close istream)
-        (.close (:fileSystem cm))))))
-
 (defn read-file
   [cm fpath buffer]
   (validate-path-lengths fpath)

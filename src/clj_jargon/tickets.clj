@@ -1,6 +1,9 @@
 (ns clj-jargon.tickets
   (:use [clj-jargon.validations]
-        [clj-jargon.init])
+        [clj-jargon.init :only [account proxy-input-stream]]
+        [clj-jargon.cart :only [temp-password]]
+        [clj-jargon.item-info :only [file is-dir?]]
+        [clj-jargon.item-ops :only [input-stream]])
   (:require [clojure-commons.file-utils :as ft])
   (:import [org.irods.jargon.ticket.packinstr TicketInp] 
            [org.irods.jargon.ticket.packinstr TicketCreateModeEnum] 

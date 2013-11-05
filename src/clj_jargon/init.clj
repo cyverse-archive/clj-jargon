@@ -1,5 +1,4 @@
 (ns clj-jargon.init
-  (:use [clj-jargon.item-ops])
   (:require [clojure.tools.logging :as log]
             [slingshot.slingshot :as ss]
             :require [clojure-commons.file-utils :as ft])
@@ -21,6 +20,24 @@
   [cm retval]
   (log/debug curr-with-jargon-index "- returning without cleaning up...")
   retval)
+
+(defn proxy-input-stream
+  [cm istream]
+  (let [with-jargon-index curr-with-jargon-index]
+    (proxy [java.io.InputStream] []
+      (available [] (.available istream))
+      (mark [readlimit] (.mark istream readlimit))
+      (markSupported [] (.markSupported istream))
+      (read
+        ([] (.read istream))
+        ([b] (.read istream b))
+        ([b off len] (.read istream b off len)))
+      (reset [] (.reset istream))
+      (skip [] (.skip istream))
+      (close []
+        (log/debug with-jargon-index "- closing the proxy input stream")
+        (.close istream)
+        (.close (:fileSystem cm))))))
 
 (defn proxy-input-stream-return
   [cm retval]

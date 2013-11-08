@@ -29,12 +29,10 @@
       (= num-bytes 0) ""
       (< num-bytes 0) ""
       :else
-      (do
-        (doto access-file
-          (.seek position SEEK-CURRENT)
-          (.read buffer)
-          (.close))
-        (String. buffer)))))
+      (let [_   (.seek access-file position SEEK-CURRENT)
+            len (.read access-file buffer)
+            _   (.close access-file)]
+        (String. buffer 0 len)))))
 
 (defn overwrite-at-position
   [cm filepath position update]

@@ -111,7 +111,7 @@
   (validate-path-lengths path)
   (cond
     (is-dir? cm path)  (str (long (.. (collection cm path) getCreatedAt getTime)))
-    (is-file? cm path) (str (long (.. (data-object cm path) getUpdatedAt getTime)))
+    (is-file? cm path) (str (long (.. (data-object cm path) getCreatedAt getTime)))
     :else              nil))
 
 (defn- dir-stat

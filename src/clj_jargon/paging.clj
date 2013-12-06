@@ -19,20 +19,24 @@
   (.length (random-access-file cm filepath)))
 
 (defn read-at-position
-  [cm filepath position num-bytes]
-  (let [access-file (random-access-file cm filepath)
-        file-size   (file-length-bytes cm filepath)
-        array-size  (if (< file-size num-bytes) file-size num-bytes)
-        buffer      (byte-array array-size)]
-    (cond
-      (= file-size 0) ""
-      (= num-bytes 0) ""
-      (< num-bytes 0) ""
-      :else
-      (let [_   (.seek access-file position SEEK-CURRENT)
-            len (.read access-file buffer)
-            _   (.close access-file)]
-        (String. buffer 0 len)))))
+  ([cm filepath position num-bytes]
+     (read-at-position cm filepath position num-bytes true))
+  ([cm filepath position num-bytes stringify?]
+     (let [access-file (random-access-file cm filepath)
+           file-size   (file-length-bytes cm filepath)
+           array-size  (if (< file-size num-bytes) file-size num-bytes)
+           buffer      (byte-array array-size)]
+       (cond
+        (= file-size 0) ""
+        (= num-bytes 0) ""
+        (< num-bytes 0) ""
+        :else
+        (let [_   (.seek access-file position SEEK-CURRENT)
+              len (.read access-file buffer)
+              _   (.close access-file)]
+          (if stringify?
+            (String. buffer 0 len)
+            buffer))))))
 
 (defn overwrite-at-position
   [cm filepath position update]

@@ -119,19 +119,23 @@
   "Returns status information for a directory."
   (validate-path-lengths path)
   (let [coll (collection cm path)]
-    {:type     :dir
-     :created  (str (long (.. coll getCreatedAt getTime)))
-     :modified (str (long (.. coll getModifiedAt getTime)))}))
+    {:id            path
+     :path          path
+     :type          :dir
+     :date-created  (long (.. coll getCreatedAt getTime))
+     :date-modified (long (.. coll getModifiedAt getTime))}))
 
 (defn- file-stat
   [cm path]
   "Returns status information for a file."
   (validate-path-lengths path)
   (let [data-obj (data-object cm path)]
-    {:type     :file
-     :size     (.getDataSize data-obj)
-     :created  (str (long (.. data-obj getUpdatedAt getTime)))
-     :modified (str (long (.. data-obj getUpdatedAt getTime)))}))
+    {:id            path
+     :path          path
+     :type          :file
+     :file-size     (.getDataSize data-obj)
+     :date-created  (long (.. data-obj getUpdatedAt getTime))
+     :date-modified (long (.. data-obj getUpdatedAt getTime))}))
 
 (defn stat
   [cm path]

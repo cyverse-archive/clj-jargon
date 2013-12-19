@@ -182,7 +182,7 @@
      :permissions   (dataobject-perm-map cm user abs-path)
      :date-created  (str (long (.. list-obj getCreatedAt getTime)))
      :date-modified (str (long (.. list-obj getModifiedAt getTime)))
-     :file-size     (str (.getDataSize list-obj))}))
+     :file-size     (.getDataSize list-obj)}))
 
 (defn list-all
   [cm dir-path]

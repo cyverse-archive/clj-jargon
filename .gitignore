@@ -12,3 +12,5 @@ bin
 .DS_Store
 .dir-locals.el
 *.eld
+.idea
+*.iml

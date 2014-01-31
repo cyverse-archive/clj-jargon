@@ -18,17 +18,19 @@
   (.mkdirs (file cm dir-path)))
 
 (defn delete
-  [cm a-path]
-  (validate-path-lengths a-path)
-  (let [fileSystemAO (:fileSystemAO cm)
-        resource     (file cm a-path)]
-    (if (:use-trash cm)
-      (if (is-dir? cm a-path)
-        (.directoryDeleteNoForce fileSystemAO resource)
-        (.fileDeleteNoForce fileSystemAO resource))
-      (if (is-dir? cm a-path)
-        (.directoryDeleteForce fileSystemAO resource)
-        (.fileDeleteForce fileSystemAO resource)))))
+  ([cm a-path]
+   (delete cm a-path false))
+  ([cm a-path force?]
+   (validate-path-lengths a-path)
+   (let [fileSystemAO (:fileSystemAO cm)
+         resource     (file cm a-path)]
+     (if (and (:use-trash cm) (false? force?))
+       (if (is-dir? cm a-path)
+         (.directoryDeleteNoForce fileSystemAO resource)
+         (.fileDeleteNoForce fileSystemAO resource))
+       (if (is-dir? cm a-path)
+         (.directoryDeleteForce fileSystemAO resource)
+         (.fileDeleteForce fileSystemAO resource))))))
 
 (defn move
   "Moves a file/dir from source path 'source' into destination directory 'dest'.

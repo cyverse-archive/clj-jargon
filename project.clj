@@ -1,4 +1,4 @@
-(defproject org.iplantc/clj-jargon "0.4.2-SNAPSHOT"
+(defproject org.iplantc/clj-jargon "0.4.1"
   :description "Clojure API on top of iRODS's jargon-core."
   :url "http://www.iplantcollaborative.org"
   :license {:name "BSD"
@@ -32,7 +32,7 @@
                                [org.slf4j/slf4j-log4j12]]]
                  [slingshot "0.10.3"]
                  [org.clojure/tools.logging "0.2.6"]]
-  :profiles {:dev {:dependencies [[org.iplantc/boxy "0.1.2-SNAPSHOT"]]}}
+  #_:profiles #_{:dev {:dependencies [[org.iplantc/boxy "0.1.2-SNAPSHOT"]]}}
   :repositories [["sonatype-nexus-snapshots"
                   {:url "https://oss.sonatype.org/content/repositories/snapshots"}]
                  ["sonatype-nexus-staging"

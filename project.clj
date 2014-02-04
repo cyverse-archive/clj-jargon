@@ -10,7 +10,7 @@
                  [:developer
                   [:url "https://github.com/orgs/iPlantCollaborativeOpenSource/teams/iplant-devs"]]]
   :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.iplantc/clojure-commons "1.4.8-SNAPSHOT"]
+                 [org.iplantc/clojure-commons "1.4.8"]
                  [org.slf4j/slf4j-api "1.7.5"]
                  [org.slf4j/slf4j-log4j12 "1.7.5"]
                  [org.irods.jargon/jargon-core "3.3.1.1"

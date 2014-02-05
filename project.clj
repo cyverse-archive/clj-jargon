@@ -39,5 +39,5 @@
                   {:url "http://ci-dev.renci.org/nexus/content/repositories/releases/"}]
                  ["renci.repository.snapshots"
                   {:url "http://ci-dev.renci.org/nexus/content/repositories/snapshots/"}]]
-  :deploy-repositories ["sonatype-nexus-staging"
-                        {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"}])
+  :deploy-repositories [["sonatype-nexus-staging"
+                         {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"}]])

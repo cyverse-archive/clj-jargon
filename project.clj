@@ -35,9 +35,9 @@
   :profiles {:dev {:dependencies [[org.iplantc/boxy "0.1.2-SNAPSHOT"]]}}
   :repositories [["sonatype-nexus-snapshots"
                   {:url "https://oss.sonatype.org/content/repositories/snapshots"}]
-                 ["sonatype-nexus-staging"
-                  {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"}]
                  ["renci.repository.releases"
                   {:url "http://ci-dev.renci.org/nexus/content/repositories/releases/"}]
                  ["renci.repository.snapshots"
-                  {:url "http://ci-dev.renci.org/nexus/content/repositories/snapshots/"}]])
+                  {:url "http://ci-dev.renci.org/nexus/content/repositories/snapshots/"}]]
+  :deploy-repositories ["sonatype-nexus-staging"
+                        {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2/"}])
